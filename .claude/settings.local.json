@@ -28,7 +28,9 @@
       "Bash(dotnet add package:*)",
       "Bash(dotnet add:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(dotnet tool install:*)",
+      "Bash(reportgenerator:*)"
     ],
     "deny": [],
     "ask": [],

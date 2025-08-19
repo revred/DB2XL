@@ -1,6 +1,7 @@
 using System.Globalization;
 using DB2XL.Configuration;
 using DB2XL.Transformers;
+using DB2XL.DeltaExport;
 
 namespace DB2XL;
 
@@ -75,4 +76,22 @@ public sealed class SqliteToExcelOptions
     /// Suffix for transformed data sheets when using dual sheet strategy
     /// </summary>
     public string TransformedDataSuffix { get; init; } = "_Transformed";
+    
+    /// <summary>
+    /// Delta export configuration for incremental exports
+    /// If provided, only changes since the last export will be included
+    /// </summary>
+    public DeltaExportConfig? DeltaExportConfig { get; init; } = null;
+    
+    /// <summary>
+    /// Whether to include delta export metadata in the output
+    /// Shows checkpoint information, strategy used, and export statistics
+    /// </summary>
+    public bool IncludeDeltaMetadata { get; init; } = true;
+    
+    /// <summary>
+    /// Custom checkpoint service for delta exports
+    /// If not provided, file-based checkpoint service will be used
+    /// </summary>
+    public IDeltaCheckpointService? DeltaCheckpointService { get; init; } = null;
 }

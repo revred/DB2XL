@@ -24,7 +24,7 @@
     </PackageReference>
     
     <!-- Application dependencies (needed for tests) -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
     <PackageReference Include="ClosedXML" Version="0.102.1" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>

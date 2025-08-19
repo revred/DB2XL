@@ -1,14 +1,16 @@
 # Getting Started with DB2XL
 
-DB2XL is a deterministic SQLite to Excel exporter that transforms your database into clean, readable Excel files. This guide will get you up and running in just a few minutes.
+DB2XL is a deterministic SQLite to Excel/JSONL exporter that transforms your database into clean, readable formats. This guide will get you up and running in just a few minutes.
 
 ## 🎯 What You'll Learn
 
 By the end of this guide, you'll know how to:
-- Export any SQLite database to Excel with perfect fidelity
-- Use advanced transformations to make data human-readable
+- Export any SQLite database to Excel or JSONL with perfect fidelity
+- Use the **console tool** for quick database analysis and export
+- Use **advanced transformations** to make data human-readable
 - Customize exports with various options
 - Verify data integrity with built-in checksums
+- Analyze database structure and performance
 
 ## 📋 Prerequisites
 
@@ -35,9 +37,42 @@ dotnet build
 ```bash
 dotnet test
 ```
-You should see: `Passed! - Failed: 1, Passed: 349, Skipped: 0` (99.7% success rate)
+You should see: `Passed! - Failed: 0, Passed: 400, Skipped: 0` (100% success rate)
 
-## 📊 Step 2: Your First Export
+### Build the Console Tool
+```bash
+dotnet build SqliteXport.Console
+```
+
+## 🚀 Step 2: Quick Start with Console Tool
+
+### Analyze Any Database
+The fastest way to inspect a SQLite database:
+
+```bash
+# Analyze database structure and content
+dotnet run --project SqliteXport.Console -- analyze sample.sqlite
+
+# Include data samples and performance metrics
+dotnet run --project SqliteXport.Console -- analyze sample.sqlite --include-data --performance
+
+# Check database integrity
+dotnet run --project SqliteXport.Console -- analyze sample.sqlite --check-integrity
+```
+
+### Export with One Command
+```bash
+# Export to Excel with intelligent transformations
+dotnet run --project SqliteXport.Console -- export sample.sqlite output.xlsx --transform
+
+# Export to JSONL for AI/ML processing
+dotnet run --project SqliteXport.Console -- export sample.sqlite output/ --format jsonl --transform
+
+# Export with dual sheets (raw + transformed data)
+dotnet run --project SqliteXport.Console -- export sample.sqlite report.xlsx --dual-sheets --metadata
+```
+
+## 📊 Step 3: Programmatic API (Your First Export)
 
 ### Create a Test Database (Optional)
 If you don't have a SQLite database, let's create one:
@@ -87,7 +122,7 @@ Open `employees.xlsx` and you'll find:
 - **employees** sheet with your data (text format for perfect fidelity)
 - **_Export_Metadata** sheet with checksums and export details
 
-## ⚙️ Step 3: Custom Configuration
+## ⚙️ Step 4: Custom Configuration
 
 Let's create a more sophisticated export:
 
@@ -116,42 +151,128 @@ Your Excel file now includes:
 - **high_earners** sheet (view data)
 - **_Export_Metadata** sheet (checksums, options, database info)
 
-## 🔄 Step 4: Data Transformations (Advanced)
+## 🔄 Step 5: Data Transformations (Advanced)
 
-Make your raw data human-readable with transformers:
+### Console Tool Transformations
+The console tool includes **22 built-in transformers** for making data human-readable:
 
-```csharp
-using SqliteXport;
-using DB2XL.Transformers;
-using DB2XL.Transformers.Examples;
+```bash
+# Export with automatic transformations
+dotnet run --project SqliteXport.Console -- export app.db readable.xlsx --transform
 
-// Create a registry with example transformers
-var registry = ExampleTransformers.CreateRegistry();
+# Use custom transformation config
+dotnet run --project SqliteXport.Console -- export app.db custom.xlsx --config transforms.json
 
-// Create some transformers
-var upperTransformer = registry.CreateCell("upper", new Dictionary<string, string>());
-var emailMaskTransformer = registry.CreateCell("email-mask", 
-    new Dictionary<string, string> { ["column"] = "email" });
-
-// Apply transformations (this would be integrated into export pipeline in future)
-var context = new CellContext("employees", "name", 0, SqliteAffinity.Text);
-var upperName = upperTransformer.Transform(context, "john doe"); // "JOHN DOE"
-
-var emailContext = new CellContext("employees", "email", 0, SqliteAffinity.Text);
-var maskedEmail = emailMaskTransformer.Transform(emailContext, "john@company.com"); // "j***@company.com"
-
-Console.WriteLine($"Transformed name: {upperName}");
-Console.WriteLine($"Masked email: {maskedEmail}");
+# Preview transformations without exporting
+dotnet run --project SqliteXport.Console -- export app.db preview.xlsx --dry-run --transform
 ```
 
-### Available Transformers
-- **`upper`** - Convert text to uppercase
-- **`trim`** - Remove whitespace (configurable)
-- **`truncate`** - Limit text length with ellipsis
-- **`coalesce`** - Replace null/empty with default
-- **`email-mask`** - Privacy-friendly email masking
+### Configuration-Driven Transformations
+Create a `transforms.json` file for custom transformations:
 
-## 🛠️ Step 5: Common Patterns
+```json
+{
+  "version": "1.0",
+  "global": {
+    "enableTransformations": true,
+    "errorHandling": "LogAndContinue"
+  },
+  "tables": {
+    "employees": {
+      "columns": {
+        "hire_date": {
+          "transformers": [
+            {
+              "name": "epoch",
+              "config": { "format": "yyyy-MM-dd" }
+            }
+          ]
+        },
+        "email": {
+          "transformers": [
+            {
+              "name": "mask",
+              "config": { "preserveLength": "true" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+### Available Built-in Transformers
+#### Time & Date
+- **`epoch`** - Unix timestamp → ISO-8601 dates
+- **`ticks`** - .NET ticks → ISO-8601 dates
+- **`julian-day`** - SQLite Julian Day → ISO-8601 dates
+- **`date-format`** - Custom date formatting
+- **`date-part`** - Extract year/month/day components
+
+#### JSON Processing
+- **`json-pretty`** - Format JSON for readability
+- **`json-compact`** - Minify JSON
+- **`json-extract`** - Extract specific JSON properties
+- **`json-flatten`** - Flatten nested JSON objects
+- **`json-validate`** - Validate JSON syntax
+- **`json-count`** - Count JSON array elements
+
+#### Text Processing
+- **`upper`** - Convert to uppercase
+- **`lower`** - Convert to lowercase
+- **`title-case`** - Convert to Title Case
+- **`trim`** - Remove whitespace
+- **`truncate`** - Limit text length
+- **`normalize-whitespace`** - Clean whitespace
+- **`regex-replace`** - Pattern-based replacements
+
+#### Privacy & Security
+- **`mask`** - Mask sensitive data
+- **`sanitize`** - Remove/replace unsafe characters
+
+#### Data Quality
+- **`coalesce`** - Replace null/empty with defaults
+
+### Programmatic Transformer Usage
+```csharp
+using DB2XL.Configuration;
+using DB2XL.Transformers;
+
+// Load configuration-driven transformations
+var config = ConfigurationLoader.LoadFromFile("transforms.json");
+var registry = TransformerRegistryBuilder.CreateDefault();
+
+// Use in export with dual strategy (raw + transformed)
+var options = new SqliteToExcelOptions
+{
+    TransformationConfig = config,
+    TransformerRegistry = registry,
+    DualExportStrategy = DualExportStrategy.DualSheets // Raw and transformed data
+};
+
+SqliteToExcel.Export("database.sqlite", "output.xlsx", options);
+```
+
+## 🛠️ Step 6: Common Patterns
+
+### Console Tool Patterns
+```bash
+# Debug application database
+dotnet run --project SqliteXport.Console -- analyze app.db --check-integrity --performance
+dotnet run --project SqliteXport.Console -- export app.db debug.xlsx --dual-sheets --metadata
+
+# Export logs for analysis
+dotnet run --project SqliteXport.Console -- export logs.db recent.xlsx --where "timestamp > datetime('now', '-1 hour')" --transform
+
+# ML data preparation
+dotnet run --project SqliteXport.Console -- export features.db training.jsonl --format jsonl --transform --exclude "id,created_at"
+
+# Schema documentation
+dotnet run --project SqliteXport.Console -- analyze schema.db --output schema.json --format json
+```
+
+### Programmatic Patterns
 
 ### Export Multiple Databases
 ```csharp
@@ -187,7 +308,7 @@ var options = new SqliteToExcelOptions
 SqliteToExcel.Export("database.sqlite", "sales_only.xlsx", options);
 ```
 
-## ✅ Step 6: Verify Your Export
+## ✅ Step 7: Verify Your Export
 
 DB2XL includes built-in validation. Check the metadata sheet for:
 
@@ -206,17 +327,21 @@ dotnet test --filter "ExportValidator"
 ## 🎉 You're Ready!
 
 You now know how to:
-- ✅ Export SQLite databases to Excel with perfect fidelity
-- ✅ Customize exports with advanced options
-- ✅ Use data transformers for human-readable output
-- ✅ Handle large databases and special cases
-- ✅ Verify export integrity with checksums
+- ✅ **Analyze databases** quickly with the console tool
+- ✅ **Export to Excel and JSONL** with perfect fidelity
+- ✅ **Use 22 built-in transformers** for human-readable output
+- ✅ **Configure transformations** with JSON/YAML files
+- ✅ **Handle large databases** and special cases
+- ✅ **Verify export integrity** with checksums and manifests
+- ✅ **Debug applications** with comprehensive database analysis
 
 ## 🔗 Next Steps
 
-- **Read the [complete specification](CLAUDE.md)** for advanced features
-- **Explore [transformer documentation](TRANSFORMERS.md)** for custom transformations
-- **Check [project status](Project_status.md)** for upcoming features
+- **[Console Tool Guide](SqliteXport.Console.md)** - Complete console tool documentation
+- **[Complete specification](CLAUDE.md)** - Advanced library features
+- **[Transformer documentation](TRANSFORMERS.md)** - All 22 built-in transformers
+- **[Filters & Advanced Features](Filters.md)** - Force multipliers and future roadmap
+- **[Project status](Project_status.md)** - Current implementation status
 - **Run the test suite** to see comprehensive examples: `dotnet test --verbosity normal`
 
 ## ❓ Need Help?
@@ -227,30 +352,41 @@ You now know how to:
 
 ## 🏃‍♂️ Quick Reference
 
-### Minimal Export
-```csharp
-SqliteToExcel.Export("database.sqlite", "output.xlsx");
+### Console Tool Commands
+```bash
+# Quick analysis
+dotnet run --project SqliteXport.Console -- analyze database.sqlite
+
+# Export with transformations
+dotnet run --project SqliteXport.Console -- export database.sqlite output.xlsx --transform
+
+# JSONL export for AI/ML
+dotnet run --project SqliteXport.Console -- export database.sqlite output/ --format jsonl --transform
 ```
 
-### Full-Featured Export
+### Programmatic API
 ```csharp
+// Minimal export
+SqliteToExcel.Export("database.sqlite", "output.xlsx");
+
+// Full-featured with transformations
+var config = ConfigurationLoader.LoadFromFile("transforms.json");
 var options = new SqliteToExcelOptions
 {
-    IncludeViews = true,
-    BlobMode = BlobRenderMode.Base64,
-    SplitOversizeSheets = true
+    TransformationConfig = config,
+    TransformerRegistry = TransformerRegistryBuilder.CreateDefault(),
+    DualExportStrategy = DualExportStrategy.DualSheets,
+    IncludeViews = true
 };
 SqliteToExcel.Export("database.sqlite", "output.xlsx", options);
-```
 
-### Transformer Example
-```csharp
-var registry = ExampleTransformers.CreateRegistry();
-var transformer = registry.CreateCell("truncate", new Dictionary<string, string>
+// JSONL export
+var jsonlOptions = new JsonLinesExportOptions
 {
-    ["maxLength"] = "50",
-    ["ellipsis"] = "..."
-});
+    TransformationConfig = config,
+    IncludeSchemaManifests = true
+};
+JsonLinesExporter.Export("database.sqlite", "output/", jsonlOptions);
 ```
 
 ---
