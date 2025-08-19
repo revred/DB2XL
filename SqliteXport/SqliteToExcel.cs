@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using Microsoft.Data.Sqlite;
 using DB2XL.Configuration;
 using DB2XL.Transformers;
+using DB2XL.Schema;
 using Microsoft.Extensions.Logging;
 
 namespace DB2XL;
@@ -575,5 +576,70 @@ public static class SqliteToExcel
         {
             throw new InvalidOperationException($"Cannot open SQLite database: {sqlitePath}", ex);
         }
+    }
+
+    /// <summary>
+    /// Generates a comprehensive schema manifest for an Excel export
+    /// </summary>
+    public static SchemaManifest GenerateManifest(string sqlitePath, string xlsxPath, SqliteToExcelOptions? options = null)
+    {
+        options ??= new SqliteToExcelOptions();
+        ValidateInputs(sqlitePath, xlsxPath);
+
+        using var connection = new SqliteConnection($"Data Source={sqlitePath};Mode=ReadOnly;Cache=Shared;Pooling=True;");
+        connection.Open();
+
+        // Initialize transformation pipeline if configured
+        TransformationPipeline? transformationPipeline = null;
+        if (options.TransformationConfig != null)
+        {
+            var registry = options.TransformerRegistry ?? TransformerRegistryBuilder.CreateDefault();
+            transformationPipeline = new TransformationPipeline(options.TransformationConfig, registry);
+        }
+
+        return ManifestGenerator.GenerateManifest(connection, sqlitePath, xlsxPath, "Excel", options, transformationPipeline);
+    }
+
+    /// <summary>
+    /// Exports SQLite to Excel and generates a comprehensive schema manifest
+    /// </summary>
+    public static SchemaManifest ExportWithManifest(string sqlitePath, string xlsxPath, SqliteToExcelOptions? options = null)
+    {
+        // Perform the export
+        Export(sqlitePath, xlsxPath, options);
+        
+        // Generate manifest
+        var manifest = GenerateManifest(sqlitePath, xlsxPath, options);
+        
+        // Save manifest alongside Excel file
+        var manifestPath = Path.ChangeExtension(xlsxPath, ".manifest.json");
+        ManifestGenerator.SaveManifest(manifest, manifestPath);
+        
+        return manifest;
+    }
+
+    /// <summary>
+    /// Validates an Excel export against its manifest
+    /// </summary>
+    public static ManifestValidationResult ValidateExport(string xlsxPath, string? manifestPath = null)
+    {
+        manifestPath ??= Path.ChangeExtension(xlsxPath, ".manifest.json");
+        
+        if (!File.Exists(manifestPath))
+        {
+            return new ManifestValidationResult
+            {
+                IsValid = false,
+                ValidationTimestamp = DateTime.UtcNow,
+                ExportPath = xlsxPath,
+                ManifestPath = manifestPath,
+                Errors = { $"Manifest file not found: {manifestPath}" }
+            };
+        }
+
+        var manifest = ManifestGenerator.LoadManifest(manifestPath);
+        var result = ManifestGenerator.ValidateExport(xlsxPath, manifest);
+        result.ManifestPath = manifestPath;  // Set the manifest path that was used
+        return result;
     }
 }
