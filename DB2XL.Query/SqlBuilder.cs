@@ -301,11 +301,8 @@ public sealed class SelectionGrammarFactory : ISelectionGrammarFactory
             var options = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
-                AllowTrailingCommas = true,
-                Converters = { 
-                    new WhereExpressionJsonConverter(),
-                    new OrderByClauseJsonConverter()
-                }
+                AllowTrailingCommas = true
+                // Converters now auto-discovered via [JsonConverter] attributes
             };
             
             var result = JsonSerializer.Deserialize<SelectionGrammar>(json, options);

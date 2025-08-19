@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using System.Text.Json.Serialization;
 
 namespace DB2XL.Query;
 
@@ -41,6 +42,7 @@ public interface ISelectionGrammar
 /// <summary>
 /// Base interface for WHERE clause expressions
 /// </summary>
+[JsonConverter(typeof(WhereExpressionJsonConverter))]
 public interface IWhereExpression
 {
     /// <summary>
@@ -54,6 +56,7 @@ public interface IWhereExpression
 /// <summary>
 /// Represents an ORDER BY clause
 /// </summary>
+[JsonConverter(typeof(OrderByClauseJsonConverter))]
 public interface IOrderByClause
 {
     /// <summary>
