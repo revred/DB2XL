@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(dir:*)",
+      "Bash(move:*)",
+      "Bash(mv:*)",
+      "Bash(test:*)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(sed:*)",
+      "Bash(rm:*)",
+      "Bash(dotnet build)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet run:*)",
+      "Bash(chmod:*)",
+      "Bash(powershell:*)",
+      "Bash(sqlite3:*)",
+      "Bash(dotnet script:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\tmp"
+    ]
+  }
+}
