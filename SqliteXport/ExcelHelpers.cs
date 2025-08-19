@@ -77,4 +77,29 @@ internal static class ExcelHelpers
 
         return (worksheet, checksumBuilder);
     }
+
+    internal static (IXLWorksheet Worksheet, ChecksumBuilder ChecksumBuilder) NewSheetWithSuffix(
+        XLWorkbook workbook, 
+        string baseSheetName, 
+        int partNumber, 
+        IReadOnlyList<Col> columns, 
+        SqliteToExcelOptions options,
+        HashSet<string>? usedNames = null,
+        string suffix = "")
+    {
+        var nameWithSuffix = $"{baseSheetName}{suffix}";
+        var sheetName = CreateSheetName(nameWithSuffix, partNumber, usedNames);
+        var worksheet = workbook.Worksheets.Add(sheetName);
+        var checksumBuilder = new ChecksumBuilder();
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            var headerCell = worksheet.Cell(1, i + 1);
+            headerCell.Value = columns[i].Name;
+            headerCell.Style.Font.Bold = true;
+            headerCell.Style.Fill.BackgroundColor = XLColor.LightGray;
+        }
+
+        return (worksheet, checksumBuilder);
+    }
 }

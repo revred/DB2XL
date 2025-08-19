@@ -1,6 +1,9 @@
 using System.Globalization;
 using ClosedXML.Excel;
 using Microsoft.Data.Sqlite;
+using DB2XL.Configuration;
+using DB2XL.Transformers;
+using Microsoft.Extensions.Logging;
 
 namespace DB2XL;
 
@@ -12,6 +15,33 @@ public static class SqliteToExcel
 
         ValidateInputs(sqlitePath, xlsxPath);
 
+        // Handle different dual export strategies
+        switch (options.DualExportStrategy)
+        {
+            case DualExportStrategy.TransformedOnly:
+                ExportSingle(sqlitePath, xlsxPath, options, useTransformations: true);
+                break;
+                
+            case DualExportStrategy.RawOnly:
+                ExportSingle(sqlitePath, xlsxPath, options, useTransformations: false);
+                break;
+                
+            case DualExportStrategy.DualSheets:
+                ExportDualSheets(sqlitePath, xlsxPath, options);
+                break;
+                
+            case DualExportStrategy.DualWorkbooks:
+                ExportDualWorkbooks(sqlitePath, xlsxPath, options);
+                break;
+                
+            default:
+                throw new ArgumentOutOfRangeException(nameof(options.DualExportStrategy), 
+                    $"Unsupported dual export strategy: {options.DualExportStrategy}");
+        }
+    }
+
+    private static void ExportSingle(string sqlitePath, string xlsxPath, SqliteToExcelOptions options, bool useTransformations)
+    {
         using var connection = new SqliteConnection($"Data Source={sqlitePath};Mode=ReadOnly;Cache=Shared;Pooling=True;");
         connection.Open();
 
@@ -26,14 +56,22 @@ public static class SqliteToExcel
         var usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var metadataRows = options.IncludeMetadataSheet ? new List<MetaRow>() : null;
 
+        // Initialize transformation pipeline if configured and requested
+        TransformationPipeline? transformationPipeline = null;
+        if (useTransformations && options.TransformationConfig != null)
+        {
+            var registry = options.TransformerRegistry ?? TransformerRegistryBuilder.CreateDefault();
+            transformationPipeline = new TransformationPipeline(options.TransformationConfig, registry);
+        }
+
         foreach (var table in tables)
         {
-            ExportTable(connection, workbook, table, options, usedSheetNames, metadataRows);
+            ExportTable(connection, workbook, table, options, usedSheetNames, metadataRows, transformationPipeline);
         }
 
         if (metadataRows != null)
         {
-            WriteMetadataSheet(workbook, options, metadataRows, sqlitePath, connection, usedSheetNames);
+            WriteMetadataSheet(workbook, options, metadataRows, sqlitePath, connection, usedSheetNames, transformationPipeline);
         }
 
         var outputDir = Path.GetDirectoryName(xlsxPath);
@@ -46,13 +84,89 @@ public static class SqliteToExcel
         transaction.Commit();
     }
 
+    private static void ExportDualSheets(string sqlitePath, string xlsxPath, SqliteToExcelOptions options)
+    {
+        using var connection = new SqliteConnection($"Data Source={sqlitePath};Mode=ReadOnly;Cache=Shared;Pooling=True;");
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_keys = OFF;";
+        command.ExecuteNonQuery();
+
+        using var transaction = connection.BeginTransaction();
+
+        var tables = DatabaseDiscovery.GetObjects(connection, options.TableNameLikeFilter, options.IncludeViews);
+        using var workbook = new XLWorkbook();
+        var usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var metadataRows = options.IncludeMetadataSheet ? new List<MetaRow>() : null;
+
+        // Initialize transformation pipeline if configured
+        TransformationPipeline? transformationPipeline = null;
+        if (options.TransformationConfig != null)
+        {
+            var registry = options.TransformerRegistry ?? TransformerRegistryBuilder.CreateDefault();
+            transformationPipeline = new TransformationPipeline(options.TransformationConfig, registry);
+        }
+
+        foreach (var table in tables)
+        {
+            // Export raw data sheet
+            ExportTableWithSuffix(connection, workbook, table, options, usedSheetNames, metadataRows, 
+                transformationPipeline: null, sheetSuffix: options.RawDataSuffix);
+                
+            // Export transformed data sheet (if transformations are configured)
+            if (transformationPipeline != null && transformationPipeline.AreTransformationsEnabled)
+            {
+                ExportTableWithSuffix(connection, workbook, table, options, usedSheetNames, metadataRows, 
+                    transformationPipeline, sheetSuffix: options.TransformedDataSuffix);
+            }
+        }
+
+        if (metadataRows != null)
+        {
+            WriteMetadataSheet(workbook, options, metadataRows, sqlitePath, connection, usedSheetNames, transformationPipeline);
+        }
+
+        var outputDir = Path.GetDirectoryName(xlsxPath);
+        if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+        {
+            Directory.CreateDirectory(outputDir);
+        }
+
+        workbook.SaveAs(xlsxPath);
+        transaction.Commit();
+    }
+
+    private static void ExportDualWorkbooks(string sqlitePath, string xlsxPath, SqliteToExcelOptions options)
+    {
+        // Export raw data to the specified path
+        ExportSingle(sqlitePath, xlsxPath, options, useTransformations: false);
+        
+        // Export transformed data to a separate workbook with suffix
+        if (options.TransformationConfig != null)
+        {
+            var transformedPath = GetTransformedWorkbookPath(xlsxPath);
+            ExportSingle(sqlitePath, transformedPath, options, useTransformations: true);
+        }
+    }
+
+    private static string GetTransformedWorkbookPath(string originalPath)
+    {
+        var directory = Path.GetDirectoryName(originalPath) ?? "";
+        var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(originalPath);
+        var extension = Path.GetExtension(originalPath);
+        
+        return Path.Combine(directory, $"{fileNameWithoutExtension}_Transformed{extension}");
+    }
+
     private static void ExportTable(
         SqliteConnection connection,
         XLWorkbook workbook,
         TableInfo table,
         SqliteToExcelOptions options,
         HashSet<string> usedSheetNames,
-        List<MetaRow>? metadataRows)
+        List<MetaRow>? metadataRows,
+        TransformationPipeline? transformationPipeline)
     {
         var columns = DatabaseDiscovery.GetColumns(connection, table.Name);
         if (columns.Count > 16384)
@@ -103,7 +217,8 @@ public static class SqliteToExcel
 
             for (int i = 0; i < columns.Count; i++)
             {
-                var (value, isText) = DataConverter.ReadValueAsText(reader, i, options);
+                var columnName = columns[i].Name;
+                var (value, isText) = DataConverter.ReadValueAsText(reader, i, options, table.Name, columnName, totalRows, transformationPipeline);
                 var cell = currentSheet.Cell(excelRow, i + 1);
 
                 if (options.WriteAllAsText || isText)
@@ -147,13 +262,120 @@ public static class SqliteToExcel
             masterChecksum.FinalizeHex()));
     }
 
+    private static void ExportTableWithSuffix(
+        SqliteConnection connection,
+        XLWorkbook workbook,
+        TableInfo table,
+        SqliteToExcelOptions options,
+        HashSet<string> usedSheetNames,
+        List<MetaRow>? metadataRows,
+        TransformationPipeline? transformationPipeline,
+        string sheetSuffix)
+    {
+        var columns = DatabaseDiscovery.GetColumns(connection, table.Name);
+        if (columns.Count > 16384)
+        {
+            throw new InvalidOperationException($"Table {table.Name} has {columns.Count} columns, exceeding Excel's limit of 16,384.");
+        }
+
+        var orderInfo = DatabaseDiscovery.DetermineOrder(connection, table.Name, columns);
+        var sql = SqlHelpers.BuildSelectSql(table.Name, columns, orderInfo, options.OrderRowsDeterministically);
+
+        int partNumber = 1;
+        int totalRows = 0;
+        int rowsInCurrentSheet = 0;
+        IXLWorksheet? currentSheet = null;
+        ChecksumBuilder? masterChecksum = new ChecksumBuilder();
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandTimeout = options.CommandTimeoutSeconds;
+        cmd.CommandText = sql;
+
+        using var reader = cmd.ExecuteReader(System.Data.CommandBehavior.SequentialAccess);
+        
+        bool hasRows = false;
+        while (reader.Read())
+        {
+            hasRows = true;
+            
+            // Create sheet on first row or when exceeding row limit
+            if (currentSheet == null || rowsInCurrentSheet >= 1048575)
+            {
+                if (rowsInCurrentSheet >= 1048575 && !options.SplitOversizeSheets)
+                {
+                    throw new InvalidOperationException(
+                        $"Table {table.Name} exceeds Excel's row limit of 1,048,576 rows. " +
+                        $"Enable SplitOversizeSheets to split across multiple sheets.");
+                }
+
+                var (sheet, checksum) = ExcelHelpers.NewSheetWithSuffix(
+                    workbook, table.Name, partNumber, columns, options, usedSheetNames, sheetSuffix);
+                currentSheet = sheet;
+                rowsInCurrentSheet = 0;
+                partNumber++;
+            }
+
+            rowsInCurrentSheet++;
+            totalRows++;
+            var excelRow = rowsInCurrentSheet + 1;
+
+            for (int i = 0; i < columns.Count; i++)
+            {
+                var columnName = columns[i].Name;
+                var (value, isText) = DataConverter.ReadValueAsText(reader, i, options, table.Name, columnName, totalRows, transformationPipeline);
+                var cell = currentSheet.Cell(excelRow, i + 1);
+
+                if (options.WriteAllAsText || isText)
+                {
+                    cell.Value = value ?? string.Empty;
+                }
+                else if (!string.IsNullOrEmpty(value))
+                {
+                    if (options.PreserveNumericTypes && 
+                        double.TryParse(value, NumberStyles.Any, options.InvariantCulture, out var numValue))
+                    {
+                        cell.SetValue(numValue);
+                    }
+                    else
+                    {
+                        cell.Value = value;
+                    }
+                }
+
+                masterChecksum.UpdateField(value);
+            }
+            masterChecksum.EndRow();
+        }
+        
+        // Ensure we create at least one sheet even for empty tables/views
+        if (!hasRows && currentSheet == null)
+        {
+            var (sheet, checksum) = ExcelHelpers.NewSheetWithSuffix(
+                workbook, table.Name, partNumber, columns, options, usedSheetNames, sheetSuffix);
+            currentSheet = sheet;
+            partNumber++;
+        }
+
+        // Add suffix to table name in metadata for identification
+        var tableNameWithSuffix = $"{table.Name}{sheetSuffix}";
+        metadataRows?.Add(new MetaRow(
+            tableNameWithSuffix,
+            table.Type,
+            totalRows,
+            columns.Count,
+            partNumber - 1,
+            orderInfo.Mode,
+            masterChecksum.FinalizeHex()));
+    }
+
     private static void WriteMetadataSheet(
         XLWorkbook workbook,
         SqliteToExcelOptions options,
         List<MetaRow> metadataRows,
         string sqlitePath,
         SqliteConnection connection,
-        HashSet<string> usedSheetNames)
+        HashSet<string> usedSheetNames,
+        TransformationPipeline? transformationPipeline)
     {
         var sheetName = ExcelHelpers.SanitizeSheetName(options.MetadataSheetName, usedSheetNames);
         var metaSheet = workbook.Worksheets.Add(sheetName);
@@ -246,7 +468,38 @@ public static class SqliteToExcel
 
         metaSheet.Cell(row, 1).Value = "Split Oversize Sheets:";
         metaSheet.Cell(row, 2).Value = options.SplitOversizeSheets ? "Yes" : "No";
-        row += 2;
+        row++;
+        
+        // Add transformation information if available
+        if (transformationPipeline != null)
+        {
+            metaSheet.Cell(row, 1).Value = "Transformations Enabled:";
+            metaSheet.Cell(row, 2).Value = transformationPipeline.AreTransformationsEnabled ? "Yes" : "No";
+            row++;
+            
+            if (transformationPipeline.AreTransformationsEnabled)
+            {
+                metaSheet.Cell(row, 1).Value = "Transformation Errors:";
+                metaSheet.Cell(row, 2).Value = transformationPipeline.ErrorCount;
+                row++;
+                
+                metaSheet.Cell(row, 1).Value = "Configuration Version:";
+                metaSheet.Cell(row, 2).Value = transformationPipeline.Configuration.Version;
+                row++;
+                
+                metaSheet.Cell(row, 1).Value = "Error Handling:";
+                metaSheet.Cell(row, 2).Value = transformationPipeline.Configuration.Global.ErrorHandling.ToString();
+                row++;
+            }
+        }
+        else
+        {
+            metaSheet.Cell(row, 1).Value = "Transformations Enabled:";
+            metaSheet.Cell(row, 2).Value = "No";
+            row++;
+        }
+        
+        row++;
 
         metaSheet.Cell(row, 1).Value = "Table Export Summary";
         metaSheet.Cell(row, 1).Style.Font.Bold = true;
