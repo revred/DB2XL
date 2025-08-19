@@ -9,18 +9,23 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Test framework packages -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />           <!-- VSTest test host -->
+    <PackageReference Include="xunit" Version="2.6.1" />                              <!-- xUnit test framework -->
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3">           <!-- xUnit adapter for VSTest -->
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    
+    <!-- Code coverage -->
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    
+    <!-- Application dependencies (needed for tests) -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
     <PackageReference Include="ClosedXML" Version="0.102.1" />
-    <PackageReference Include="xunit" Version="2.6.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 

@@ -471,34 +471,8 @@ public static class SqliteToExcel
         metaSheet.Cell(row, 2).Value = options.SplitOversizeSheets ? "Yes" : "No";
         row++;
         
-        // Add transformation information if available
-        if (transformationPipeline != null)
-        {
-            metaSheet.Cell(row, 1).Value = "Transformations Enabled:";
-            metaSheet.Cell(row, 2).Value = transformationPipeline.AreTransformationsEnabled ? "Yes" : "No";
-            row++;
-            
-            if (transformationPipeline.AreTransformationsEnabled)
-            {
-                metaSheet.Cell(row, 1).Value = "Transformation Errors:";
-                metaSheet.Cell(row, 2).Value = transformationPipeline.ErrorCount;
-                row++;
-                
-                metaSheet.Cell(row, 1).Value = "Configuration Version:";
-                metaSheet.Cell(row, 2).Value = transformationPipeline.Configuration.Version;
-                row++;
-                
-                metaSheet.Cell(row, 1).Value = "Error Handling:";
-                metaSheet.Cell(row, 2).Value = transformationPipeline.Configuration.Global.ErrorHandling.ToString();
-                row++;
-            }
-        }
-        else
-        {
-            metaSheet.Cell(row, 1).Value = "Transformations Enabled:";
-            metaSheet.Cell(row, 2).Value = "No";
-            row++;
-        }
+        // Add comprehensive transformation information
+        WriteTransformationMetadata(metaSheet, ref row, transformationPipeline);
         
         row++;
 
@@ -535,6 +509,192 @@ public static class SqliteToExcel
         }
 
         metaSheet.Columns().AdjustToContents();
+    }
+
+    /// <summary>
+    /// Writes comprehensive transformation tracking information to the metadata sheet
+    /// </summary>
+    private static void WriteTransformationMetadata(
+        IXLWorksheet metaSheet, 
+        ref int row, 
+        TransformationPipeline? transformationPipeline)
+    {
+        metaSheet.Cell(row, 1).Value = "Transformation Configuration";
+        metaSheet.Cell(row, 1).Style.Font.Bold = true;
+        row++;
+
+        if (transformationPipeline == null)
+        {
+            metaSheet.Cell(row, 1).Value = "Transformations Enabled:";
+            metaSheet.Cell(row, 2).Value = "No";
+            row++;
+            metaSheet.Cell(row, 1).Value = "Reason:";
+            metaSheet.Cell(row, 2).Value = "No transformation configuration provided";
+            row++;
+            return;
+        }
+
+        var config = transformationPipeline.Configuration;
+        
+        // Basic transformation status
+        metaSheet.Cell(row, 1).Value = "Transformations Enabled:";
+        metaSheet.Cell(row, 2).Value = transformationPipeline.AreTransformationsEnabled ? "Yes" : "No";
+        row++;
+
+        if (!transformationPipeline.AreTransformationsEnabled)
+        {
+            metaSheet.Cell(row, 1).Value = "Reason:";
+            metaSheet.Cell(row, 2).Value = "Transformations disabled in configuration";
+            row++;
+            return;
+        }
+
+        // Configuration details
+        metaSheet.Cell(row, 1).Value = "Configuration Version:";
+        metaSheet.Cell(row, 2).Value = config.Version;
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Error Handling Strategy:";
+        metaSheet.Cell(row, 2).Value = config.Global.ErrorHandling.ToString();
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Max Errors Allowed:";
+        metaSheet.Cell(row, 2).Value = config.Global.MaxErrors;
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Transformation Errors Encountered:";
+        metaSheet.Cell(row, 2).Value = transformationPipeline.ErrorCount;
+        row++;
+
+        // Performance settings
+        metaSheet.Cell(row, 1).Value = "Batch Size:";
+        metaSheet.Cell(row, 2).Value = config.Global.Performance.BatchSize;
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Parallel Processing:";
+        metaSheet.Cell(row, 2).Value = config.Global.Performance.EnableParallelProcessing ? "Yes" : "No";
+        row++;
+
+        if (config.Global.Performance.EnableParallelProcessing)
+        {
+            metaSheet.Cell(row, 1).Value = "Max Parallelism:";
+            metaSheet.Cell(row, 2).Value = config.Global.Performance.MaxDegreeOfParallelism == 0 
+                ? "Auto" 
+                : config.Global.Performance.MaxDegreeOfParallelism.ToString();
+            row++;
+        }
+
+        // Global transformers summary
+        if (config.GlobalTransformers.Count > 0)
+        {
+            row++;
+            metaSheet.Cell(row, 1).Value = "Global Transformers";
+            metaSheet.Cell(row, 1).Style.Font.Bold = true;
+            row++;
+
+            metaSheet.Cell(row, 1).Value = "Count:";
+            metaSheet.Cell(row, 2).Value = config.GlobalTransformers.Count;
+            row++;
+
+            metaSheet.Cell(row, 1).Value = "Transformer Names:";
+            metaSheet.Cell(row, 2).Value = string.Join(", ", config.GlobalTransformers
+                .Where(t => t.Enabled)
+                .Select(t => t.Name));
+            row++;
+        }
+
+        // Table-specific transformers summary
+        if (config.Tables.Count > 0)
+        {
+            row++;
+            metaSheet.Cell(row, 1).Value = "Table-Specific Transformations";
+            metaSheet.Cell(row, 1).Style.Font.Bold = true;
+            row++;
+
+            metaSheet.Cell(row, 1).Value = "Tables with Transformations:";
+            metaSheet.Cell(row, 2).Value = config.Tables.Count(kvp => kvp.Value.EnableTransformations);
+            row++;
+
+            var tablesWithFilters = config.Tables.Where(kvp => 
+                kvp.Value.Filters?.ExcludeColumns.Count > 0 || 
+                kvp.Value.Filters?.IncludeColumns.Count > 0).ToList();
+
+            if (tablesWithFilters.Count > 0)
+            {
+                metaSheet.Cell(row, 1).Value = "Tables with Column Filters:";
+                metaSheet.Cell(row, 2).Value = tablesWithFilters.Count;
+                row++;
+            }
+
+            var totalColumnTransformers = config.Tables.Values
+                .SelectMany(t => t.Columns.Values)
+                .SelectMany(cols => cols)
+                .Count(t => t.Enabled);
+
+            if (totalColumnTransformers > 0)
+            {
+                metaSheet.Cell(row, 1).Value = "Total Column Transformers:";
+                metaSheet.Cell(row, 2).Value = totalColumnTransformers;
+                row++;
+            }
+
+            var totalRowTransformers = config.Tables.Values
+                .SelectMany(t => t.RowTransformers)
+                .Count(t => t.Enabled);
+
+            if (totalRowTransformers > 0)
+            {
+                metaSheet.Cell(row, 1).Value = "Total Row Transformers:";
+                metaSheet.Cell(row, 2).Value = totalRowTransformers;
+                row++;
+            }
+        }
+
+        // Data lineage tracking
+        row++;
+        metaSheet.Cell(row, 1).Value = "Data Lineage and Provenance";
+        metaSheet.Cell(row, 1).Style.Font.Bold = true;
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Source System:";
+        metaSheet.Cell(row, 2).Value = "SQLite Database";
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Transformation Pipeline:";
+        metaSheet.Cell(row, 2).Value = "DB2XL Configuration-Based Pipeline";
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Data Integrity:";
+        metaSheet.Cell(row, 2).Value = transformationPipeline.ErrorCount == 0 ? "Intact" : $"Modified ({transformationPipeline.ErrorCount} errors)";
+        row++;
+
+        metaSheet.Cell(row, 1).Value = "Audit Trail:";
+        metaSheet.Cell(row, 2).Value = "Available in transformation configuration and error logs";
+        row++;
+
+        // Transformation quality metrics
+        if (transformationPipeline.ErrorCount > 0)
+        {
+            row++;
+            metaSheet.Cell(row, 1).Value = "Quality Metrics";
+            metaSheet.Cell(row, 1).Style.Font.Bold = true;
+            row++;
+
+            metaSheet.Cell(row, 1).Value = "Error Rate:";
+            metaSheet.Cell(row, 2).Value = $"{transformationPipeline.ErrorCount} errors";
+            row++;
+
+            metaSheet.Cell(row, 1).Value = "Data Quality Impact:";
+            metaSheet.Cell(row, 2).Value = config.Global.ErrorHandling switch
+            {
+                ErrorHandling.StopOnError => "High - Processing stops on error",
+                ErrorHandling.UseOriginalOnError => "Medium - Original values preserved on error",
+                ErrorHandling.SkipErrors => "Low - Errors silently skipped",
+                ErrorHandling.LogAndContinue => "Medium - Errors logged and tracked",
+                _ => "Unknown"
+            };
+            row++;
+        }
     }
 
     private static void ValidateInputs(string sqlitePath, string xlsxPath)

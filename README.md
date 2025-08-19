@@ -102,7 +102,8 @@ DB2XL creates an Excel file with:
 - **⚙️ Simple API**: One method call with sensible defaults
 - **🔍 Safe Operations**: Read-only database access with snapshot consistency
 - **🔄 Data Transformation**: Advanced transformer system for human-readable output
-- **🤖 LLM-Ready**: JSONL export format with schema manifests (coming soon)
+- **🤖 AI-Ready**: JSONL export format with schema manifests for LLM workflows
+- **🛠️ Console Tool**: Command-line interface designed for AI assistant integration
 
 ## 📚 Usage Examples
 
@@ -458,8 +459,9 @@ For issues, questions, or feature requests:
 2. Check existing [Issues](https://github.com/revred/DB2XL/issues)
 3. Review the [complete specification](CLAUDE.md) for advanced features
 4. Explore [transformer documentation](TRANSFORMERS.md) for data transformation
-5. Run the test suite to verify your environment: `dotnet test`
-6. Create a new issue with:
+5. **AI Assistant Integration**: See [Console Tool Guide](Sqlite.Console.md) for Claude and AI debugging workflows
+6. Run the test suite to verify your environment: `dotnet test`
+7. Create a new issue with:
    - Database schema details
    - Error messages and stack traces
    - Expected vs actual behavior

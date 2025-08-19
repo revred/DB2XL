@@ -1,0 +1,16 @@
+<Project>
+  <!-- Consolidate test results in solution root -->
+  <PropertyGroup>
+    <VSTestResultsDirectory>$(MSBuildThisFileDirectory)TestResults</VSTestResultsDirectory>
+    <CoverletOutputDirectory>$(MSBuildThisFileDirectory)TestResults</CoverletOutputDirectory>
+    <TestResultsDirectory>$(MSBuildThisFileDirectory)TestResults</TestResultsDirectory>
+  </PropertyGroup>
+  
+  <!-- Common project settings -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
