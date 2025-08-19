@@ -20,4 +20,8 @@
     <PackageReference Include="ClosedXML" Version="0.102.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SqliteXport.Tests" />
+  </ItemGroup>
+
 </Project>

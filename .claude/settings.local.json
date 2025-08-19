@@ -28,7 +28,8 @@
     "deny": [],
     "ask": [],
     "additionalDirectories": [
-      "C:\\tmp"
+      "C:\\tmp",
+      "C:\\mnt\\c\\code"
     ]
   }
 }

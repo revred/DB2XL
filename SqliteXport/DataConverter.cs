@@ -18,9 +18,9 @@ internal static class DataConverter
         return fieldType switch
         {
             Type t when t == typeof(string) => (value.ToString()!, true),
-            Type t when t == typeof(long) => FormatNumeric(value.ToString()!, options),
-            Type t when t == typeof(double) => FormatNumeric(value.ToString()!, options),
-            Type t when t == typeof(decimal) => FormatNumeric(value.ToString()!, options),
+            Type t when t == typeof(long) => FormatNumeric(((long)value).ToString(options.InvariantCulture), options),
+            Type t when t == typeof(double) => FormatNumeric(((double)value).ToString(options.InvariantCulture), options),
+            Type t when t == typeof(decimal) => FormatNumeric(((decimal)value).ToString(options.InvariantCulture), options),
             Type t when t == typeof(byte[]) => FormatBlob((byte[])value, options),
             _ => (value.ToString()!, true)
         };

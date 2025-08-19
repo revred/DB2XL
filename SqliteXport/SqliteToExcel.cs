@@ -75,8 +75,12 @@ public static class SqliteToExcel
 
         using var reader = cmd.ExecuteReader(System.Data.CommandBehavior.SequentialAccess);
         
+        bool hasRows = false;
         while (reader.Read())
         {
+            hasRows = true;
+            
+            // Create sheet on first row or when exceeding row limit
             if (currentSheet == null || rowsInCurrentSheet >= 1048575)
             {
                 if (rowsInCurrentSheet >= 1048575 && !options.SplitOversizeSheets)
@@ -122,6 +126,15 @@ public static class SqliteToExcel
                 masterChecksum.UpdateField(value);
             }
             masterChecksum.EndRow();
+        }
+        
+        // Ensure we create at least one sheet even for empty tables/views
+        if (!hasRows && currentSheet == null)
+        {
+            var (sheet, checksum) = ExcelHelpers.NewSheet(
+                workbook, table.Name, partNumber, columns, options, usedSheetNames);
+            currentSheet = sheet;
+            partNumber++;
         }
 
         metadataRows?.Add(new MetaRow(

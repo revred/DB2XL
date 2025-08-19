@@ -128,14 +128,36 @@ public class ExportValidator
             cmd.CommandText = $"SELECT COUNT(*) FROM \"{tableName.Replace("\"", "\"\"")}\"";
             validation.ExpectedRows = Convert.ToInt32(cmd.ExecuteScalar());
 
-            cmd.CommandText = $"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")";
-            using var reader = cmd.ExecuteReader();
+            // Check if it's a view or table
+            cmd.CommandText = $"SELECT type FROM sqlite_master WHERE name = @name";
+            cmd.Parameters.Clear();
+            cmd.Parameters.AddWithValue("@name", tableName);
+            var objectType = cmd.ExecuteScalar()?.ToString() ?? "table";
+            
             var columns = new List<string>();
-            while (reader.Read())
+            
+            if (objectType == "view")
             {
-                columns.Add(reader.GetString(1));
+                // For views, we need to get column info differently
+                cmd.CommandText = $"SELECT * FROM \"{tableName.Replace("\"", "\"\"")}\" LIMIT 0";
+                using var reader = cmd.ExecuteReader();
+                validation.ExpectedColumns = reader.FieldCount;
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    columns.Add(reader.GetName(i));
+                }
             }
-            validation.ExpectedColumns = columns.Count;
+            else
+            {
+                // For tables, use PRAGMA table_info
+                cmd.CommandText = $"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")";
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    columns.Add(reader.GetString(1));
+                }
+                validation.ExpectedColumns = columns.Count;
+            }
 
             validation.ExpectedChecksum = CalculateTableChecksum(connection, tableName);
 
@@ -188,31 +210,58 @@ public class ExportValidator
         using var sha256 = SHA256.Create();
         using var cmd = connection.CreateCommand();
         
-        cmd.CommandText = $"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")";
+        // Check if it's a view or table
+        cmd.CommandText = "SELECT type FROM sqlite_master WHERE name = @name";
+        cmd.Parameters.Clear();
+        cmd.Parameters.AddWithValue("@name", tableName);
+        var objectType = cmd.ExecuteScalar()?.ToString() ?? "table";
+        
         var columns = new List<string>();
-        using (var reader = cmd.ExecuteReader())
+        string orderBy;
+        
+        if (objectType == "view")
         {
-            while (reader.Read())
+            // For views, get column info differently and don't use rowid
+            cmd.CommandText = $"SELECT * FROM \"{tableName.Replace("\"", "\"\"")}\" LIMIT 0";
+            cmd.Parameters.Clear();
+            using var reader = cmd.ExecuteReader();
+            for (int i = 0; i < reader.FieldCount; i++)
             {
-                columns.Add($"\"{reader.GetString(1).Replace("\"", "\"\"")}\"");
+                columns.Add($"\"{reader.GetName(i).Replace("\"", "\"\"")}\"");
             }
+            // Views can't be ordered deterministically, so no ORDER BY
+            orderBy = "";
         }
-
-        var pkColumns = columns.Where((col, idx) => 
+        else
         {
+            // For tables, use PRAGMA table_info
             cmd.CommandText = $"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")";
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
+            cmd.Parameters.Clear();
+            using (var reader = cmd.ExecuteReader())
             {
-                if ($"\"{r.GetString(1).Replace("\"", "\"\"")}\"" == col)
-                    return r.GetInt32(5) > 0;
+                while (reader.Read())
+                {
+                    columns.Add($"\"{reader.GetString(1).Replace("\"", "\"\"")}\"");
+                }
             }
-            return false;
-        }).ToList();
 
-        var orderBy = pkColumns.Count > 0 ? 
-            $"ORDER BY {string.Join(", ", pkColumns)} ASC" : 
-            "ORDER BY rowid ASC";
+            var pkColumns = columns.Where((col, idx) => 
+            {
+                cmd.CommandText = $"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")";
+                cmd.Parameters.Clear();
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    if ($"\"{r.GetString(1).Replace("\"", "\"\"")}\"" == col)
+                        return r.GetInt32(5) > 0;
+                }
+                return false;
+            }).ToList();
+
+            orderBy = pkColumns.Count > 0 ? 
+                $"ORDER BY {string.Join(", ", pkColumns)} ASC" : 
+                "ORDER BY rowid ASC";
+        }
 
         cmd.CommandText = $"SELECT {string.Join(", ", columns)} FROM \"{tableName.Replace("\"", "\"\"")}\" {orderBy}";
         
