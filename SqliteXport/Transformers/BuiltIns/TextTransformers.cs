@@ -590,8 +590,8 @@ public class SanitizeTransformer : CellTransformerBase
 
     private string SanitizeUrl(string text, string replacement)
     {
-        // Keep only URL-safe characters
-        return Regex.Replace(text, @"[^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]", replacement);
+        // Keep only URL-safe characters, including spaces for slug-like URLs
+        return Regex.Replace(text, @"[^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;= ]", replacement);
     }
 
     private string SanitizeAlphanumeric(string text, string replacement)

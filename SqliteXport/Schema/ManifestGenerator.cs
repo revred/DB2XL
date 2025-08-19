@@ -132,28 +132,42 @@ public static class ManifestGenerator
 
         try
         {
-            // Check if export file exists
-            if (!File.Exists(exportPath))
-            {
-                result.IsValid = false;
-                result.Errors.Add($"Export file not found: {exportPath}");
-                return result;
-            }
-
-            // Get file info
-            var fileInfo = new FileInfo(exportPath);
-            result.ExportFileSizeBytes = fileInfo.Length;
-            result.ExportLastModified = fileInfo.LastWriteTimeUtc;
-
             // Format-specific validation
             switch (manifest.ExportFormat.ToLowerInvariant())
             {
                 case "excel":
                 case "xlsx":
+                    // Check if export file exists
+                    if (!File.Exists(exportPath))
+                    {
+                        result.IsValid = false;
+                        result.Errors.Add($"Export file not found: {exportPath}");
+                        return result;
+                    }
+
+                    // Get file info
+                    var fileInfo = new FileInfo(exportPath);
+                    result.ExportFileSizeBytes = fileInfo.Length;
+                    result.ExportLastModified = fileInfo.LastWriteTimeUtc;
+
                     ValidateExcelExport(exportPath, manifest, result);
                     break;
                 case "jsonl":
                 case "json-lines":
+                    // Check if export directory exists
+                    if (!Directory.Exists(exportPath))
+                    {
+                        result.IsValid = false;
+                        result.Errors.Add($"Export directory not found: {exportPath}");
+                        return result;
+                    }
+
+                    // Get directory info
+                    var dirInfo = new DirectoryInfo(exportPath);
+                    result.ExportLastModified = dirInfo.LastWriteTimeUtc;
+                    // For directories, calculate total size of all files
+                    result.ExportFileSizeBytes = dirInfo.GetFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
+
                     ValidateJsonLinesExport(exportPath, manifest, result);
                     break;
                 default:
@@ -265,7 +279,8 @@ public static class ManifestGenerator
                 // Validate table files exist
                 foreach (var table in manifest.DatabaseSchema.Tables)
                 {
-                    var expectedFile = Path.Combine(exportPath, $"{table.Name}.jsonl");
+                    var sanitizedName = SanitizeFileName(table.Name);
+                    var expectedFile = Path.Combine(exportPath, $"{sanitizedName}.jsonl");
                     if (!File.Exists(expectedFile))
                     {
                         result.Warnings.Add($"Expected JSONL file for table '{table.Name}' not found");
@@ -281,6 +296,13 @@ public static class ManifestGenerator
         {
             result.Errors.Add($"JSONL validation failed: {ex.Message}");
         }
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+        return sanitized;
     }
 }
 
