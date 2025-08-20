@@ -1,0 +1,56 @@
+{
+  "$schema": "https://db2xl.org/schemas/selection-grammar.json",
+  "_comment": "Complex filter with OR conditions and multiple sorting",
+  "table": "orders",
+  "select": ["order_id", "customer_id", "product_id", "quantity", "unit_price", "total_amount", "order_date", "status"],
+  "where": {
+    "type": "or",
+    "conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "comparison",
+            "column": "total_amount",
+            "operator": ">",
+            "value": "10000"
+          },
+          {
+            "type": "comparison",
+            "column": "status",
+            "operator": "=",
+            "value": "pending"
+          }
+        ]
+      },
+      {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "comparison",
+            "column": "quantity",
+            "operator": ">=",
+            "value": "100"
+          },
+          {
+            "type": "comparison",
+            "column": "customer_id",
+            "operator": "in",
+            "value": ["VIP001", "VIP002", "VIP003"]
+          }
+        ]
+      }
+    ]
+  },
+  "orderBy": [
+    {
+      "column": "total_amount",
+      "direction": "desc"
+    },
+    {
+      "column": "order_date",
+      "direction": "desc"
+    }
+  ],
+  "limit": 500
+}

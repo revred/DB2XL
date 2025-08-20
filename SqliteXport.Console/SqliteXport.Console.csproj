@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SqliteXport\SqliteXport.csproj" />
+    <ProjectReference Include="..\DB2XL.Query\DB2XL.Query.csproj" />
+    <ProjectReference Include="..\DB2XL.DeltaExport\DB2XL.DeltaExport.csproj" />
   </ItemGroup>
 
   <ItemGroup>

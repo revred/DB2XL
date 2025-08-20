@@ -1,0 +1,35 @@
+{
+  "$schema": "https://db2xl.org/schemas/selection-grammar.json",
+  "_comment": "Filter records within a date range with specific columns",
+  "table": "transactions",
+  "select": ["id", "user_id", "amount", "created_at", "status"],
+  "where": {
+    "type": "and",
+    "conditions": [
+      {
+        "type": "comparison",
+        "column": "created_at",
+        "operator": ">=",
+        "value": "2024-01-01"
+      },
+      {
+        "type": "comparison",
+        "column": "created_at",
+        "operator": "<=",
+        "value": "2024-12-31"
+      },
+      {
+        "type": "comparison",
+        "column": "status",
+        "operator": "=",
+        "value": "completed"
+      }
+    ]
+  },
+  "orderBy": [
+    {
+      "column": "created_at",
+      "direction": "desc"
+    }
+  ]
+}

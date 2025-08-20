@@ -11,7 +11,7 @@ internal sealed record Col(string Name, string Type, bool NotNull, object? Defau
 
 internal sealed record OrderInfo(OrderMode Mode, IReadOnlyList<string> Columns);
 
-internal sealed record TableInfo(string Name, string Type);
+public sealed record TableInfo(string Name, string Type);
 
 internal sealed record MetaRow(
     string TableName,

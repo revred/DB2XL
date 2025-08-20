@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using DB2XL.Configuration;
 using DB2XL.Transformers;
 using DB2XL.Schema;
+using DB2XL.Query;
 using Microsoft.Extensions.Logging;
 
 namespace DB2XL;
@@ -52,7 +53,7 @@ public static class SqliteToExcel
 
         using var transaction = connection.BeginTransaction();
 
-        var tables = DatabaseDiscovery.GetObjects(connection, options.TableNameLikeFilter, options.IncludeViews);
+        var tables = GetTablesToExport(connection, options);
         using var workbook = new XLWorkbook();
         var usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var metadataRows = options.IncludeMetadataSheet ? new List<MetaRow>() : null;
@@ -96,7 +97,7 @@ public static class SqliteToExcel
 
         using var transaction = connection.BeginTransaction();
 
-        var tables = DatabaseDiscovery.GetObjects(connection, options.TableNameLikeFilter, options.IncludeViews);
+        var tables = GetTablesToExport(connection, options);
         using var workbook = new XLWorkbook();
         var usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var metadataRows = options.IncludeMetadataSheet ? new List<MetaRow>() : null;
@@ -176,7 +177,7 @@ public static class SqliteToExcel
         }
 
         var orderInfo = DatabaseDiscovery.DetermineOrder(connection, table.Name, columns);
-        var sql = SqlHelpers.BuildSelectSql(table.Name, columns, orderInfo, options.OrderRowsDeterministically);
+        var sql = BuildSelectSqlWithGrammar(table.Name, columns, orderInfo, options);
 
         int partNumber = 1;
         int totalRows = 0;
@@ -801,5 +802,82 @@ public static class SqliteToExcel
         var result = ManifestGenerator.ValidateExport(xlsxPath, manifest);
         result.ManifestPath = manifestPath;  // Set the manifest path that was used
         return result;
+    }
+
+    /// <summary>
+    /// Gets tables to export based on options, with SelectionGrammar support
+    /// </summary>
+    private static List<TableInfo> GetTablesToExport(SqliteConnection connection, SqliteToExcelOptions options)
+    {
+        if (options.SelectionGrammar != null)
+        {
+            // Use SelectionGrammar for advanced table selection and filtering
+            return GetTablesFromSelectionGrammar(connection, options.SelectionGrammar);
+        }
+        
+        // Fall back to simple table name filtering
+        return DatabaseDiscovery.GetObjects(connection, options.TableNameLikeFilter, options.IncludeViews);
+    }
+
+    /// <summary>
+    /// Processes SelectionGrammar to get table information with filtering support
+    /// </summary>
+    private static List<TableInfo> GetTablesFromSelectionGrammar(SqliteConnection connection, SelectionGrammar grammar)
+    {
+        var result = new List<TableInfo>();
+        
+        // Validate the table exists
+        var tableInfo = DatabaseDiscovery.GetObjects(connection, null, true)
+            .FirstOrDefault(t => t.Name.Equals(grammar.Table, StringComparison.OrdinalIgnoreCase));
+            
+        if (tableInfo != null)
+        {
+            // For now, just add the table - advanced filtering will be handled in ExportTable
+            // The SelectionGrammar contains WHERE/ORDER BY information that will be used during data retrieval
+            result.Add(tableInfo);
+        }
+        else
+        {
+            throw new InvalidOperationException($"Table '{grammar.Table}' specified in SelectionGrammar does not exist in the database");
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Builds SELECT SQL with SelectionGrammar support for advanced filtering
+    /// </summary>
+    private static string BuildSelectSqlWithGrammar(
+        string tableName, 
+        List<Col> columns, 
+        OrderInfo orderInfo, 
+        SqliteToExcelOptions options)
+    {
+        // Check if we have SelectionGrammar for this specific table
+        if (options.SelectionGrammar != null)
+        {
+            // Check if the SelectionGrammar is for this table
+            if (options.SelectionGrammar.Table.Equals(tableName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Use SqlBuilder from DB2XL.Query to generate SQL with advanced filtering
+                var sqlBuilder = new SqlBuilder();
+                
+                var result = sqlBuilder.BuildQuery(options.SelectionGrammar);
+                
+                // For now, we can't easily pass parameters to the existing ExportTable infrastructure
+                // So we'll validate that the query is safe and doesn't require parameters
+                if (result.Parameters.Any())
+                {
+                    throw new InvalidOperationException(
+                        "SelectionGrammar queries with parameters are not yet supported in this context. " +
+                        "Please use literal values in WHERE clauses for now.");
+                }
+                
+                return result.Sql;
+            }
+        }
+        
+        // Fall back to the original SQL building approach
+        return SqlHelpers.BuildSelectSql(tableName, columns, orderInfo, options.OrderRowsDeterministically);
     }
 }

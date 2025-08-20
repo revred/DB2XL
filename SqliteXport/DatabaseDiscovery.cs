@@ -2,9 +2,9 @@ using Microsoft.Data.Sqlite;
 
 namespace DB2XL;
 
-internal static class DatabaseDiscovery
+public static class DatabaseDiscovery
 {
-    internal static List<TableInfo> GetObjects(SqliteConnection connection, string? tableNameLikeFilter, bool includeViews)
+    public static List<TableInfo> GetObjects(SqliteConnection connection, string? tableNameLikeFilter, bool includeViews)
     {
         using var command = connection.CreateCommand();
         

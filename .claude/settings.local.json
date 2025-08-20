@@ -30,7 +30,9 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(dotnet tool install:*)",
-      "Bash(reportgenerator:*)"
+      "Bash(reportgenerator:*)",
+      "Bash(SqliteXport.Console.exe analyze:*)",
+      "Bash(dotnet:*)"
     ],
     "deny": [],
     "ask": [],

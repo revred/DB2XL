@@ -1,0 +1,21 @@
+{
+  "table": "users",
+  "select": ["id", "name", "email", "created_at"],
+  "where": {
+    "type": "comparison",
+    "column": "created_at",
+    "operator": ">=",
+    "value": "2024-01-01"
+  },
+  "orderBy": [
+    {
+      "column": "created_at",
+      "direction": "desc"
+    },
+    {
+      "column": "name",
+      "direction": "asc"
+    }
+  ],
+  "limit": 100
+}

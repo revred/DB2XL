@@ -1,4 +1,5 @@
 using DB2XL;
+using DB2XL.Query;
 using SqliteXport.Console.Options;
 using SqliteXport.Console.Helpers;
 using Spectre.Console;
@@ -142,8 +143,8 @@ public static class AnalyzeCommand
     {
         var tables = new List<TableAnalysis>();
         
-        // Get table information directly since DatabaseDiscovery is internal
-        var discoveredTables = GetTablesFromDatabase(connection, true);
+        // Get table information using DatabaseDiscovery
+        var discoveredTables = DatabaseDiscovery.GetObjects(connection, null, true);
 
         foreach (var table in discoveredTables)
         {
@@ -169,10 +170,23 @@ public static class AnalyzeCommand
                 analysis.RowCount = -1; // Indicates error
             }
 
-            // Primary key discovery (aligned with Filters.md vision)
-            if (options.PkDiscovery)
+            // Primary key discovery using advanced DB2XL.Query service
+            if (options.PkDiscovery || options.ShowPkStrategy || options.PkQuality || options.DeterministicOrder)
             {
-                analysis.PrimaryKeyStrategy = DiscoverPrimaryKeyStrategy(connection, table.Name, analysis.Columns);
+                var pkService = new PrimaryKeyDiscoveryService();
+                var pkInfo = pkService.DiscoverPrimaryKey(connection, table.Name);
+                
+                analysis.PrimaryKeyInfo = new PrimaryKeyAnalysis
+                {
+                    Strategy = pkInfo.Strategy.ToString(),
+                    Columns = pkInfo.Columns.ToList(),
+                    IsGuaranteed = pkInfo.IsDeterministic,
+                    QualityScore = CalculatePkQuality(analysis.Columns, pkInfo),
+                    DeterministicOrdering = pkInfo.IsDeterministic ? "Guaranteed" : pkInfo.Columns.Any() ? "Best-effort" : "None"
+                };
+                
+                // Legacy field for backward compatibility
+                analysis.PrimaryKeyStrategy = FormatPkStrategy(pkInfo);
             }
 
             // Get data samples if requested
@@ -298,32 +312,61 @@ public static class AnalyzeCommand
         return suggestions;
     }
 
-    private static string DiscoverPrimaryKeyStrategy(SqliteConnection connection, string tableName, List<ColumnAnalysis> columns)
+    private static string FormatPkStrategy(PrimaryKeyInfo pkInfo)
     {
-        // Implement PK discovery strategy from Filters.md
-        var pkColumns = columns.Where(c => c.IsPrimaryKey).OrderBy(c => c.PrimaryKeyOrder).ToList();
-        
-        if (pkColumns.Any())
+        return pkInfo.Strategy switch
         {
-            var pkNames = string.Join(", ", pkColumns.Select(c => c.Name));
-            return $"Composite PK: [{pkNames}]";
-        }
+            PrimaryKeyStrategy.ExplicitPrimaryKey => $"Explicit PK: [{string.Join(", ", pkInfo.Columns)}]",
+            PrimaryKeyStrategy.UniqueIndex => $"Unique Index: [{string.Join(", ", pkInfo.Columns)}]",
+            PrimaryKeyStrategy.ImplicitRowId => "Implicit rowid",
+            PrimaryKeyStrategy.SyntheticHash => "Synthetic hash (no suitable PK found)",
+            _ => "Unknown"
+        };
+    }
 
-        // Check for WITHOUT ROWID
-        try
+    private static double CalculatePkQuality(List<ColumnAnalysis> columns, PrimaryKeyInfo pkInfo)
+    {
+        if (pkInfo.Strategy == PrimaryKeyStrategy.SyntheticHash)
+            return 0.0; // Synthetic hash is lowest quality
+
+        if (pkInfo.Strategy == PrimaryKeyStrategy.ImplicitRowId)
+            return 0.7; // Rowid is reliable but not ideal for replication
+
+        if (pkInfo.Strategy == PrimaryKeyStrategy.ExplicitPrimaryKey)
+            return 1.0; // Explicit PK is highest quality
+
+        if (pkInfo.Strategy == PrimaryKeyStrategy.UniqueIndex)
+            return 0.9; // Unique index is very good
+
+        return 0.5; // Default for unknown strategies
+    }
+
+    private static List<string> SuggestMissingIndexes(SqliteConnection connection, List<TableAnalysis> tables)
+    {
+        var suggestions = new List<string>();
+        
+        foreach (var table in tables)
         {
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = $"SELECT sql FROM sqlite_master WHERE type='table' AND name='{tableName.Replace("'", "''")}'";
-            var sql = cmd.ExecuteScalar()?.ToString();
-            
-            if (sql?.Contains("WITHOUT ROWID", StringComparison.OrdinalIgnoreCase) == true)
+            // Suggest indexes for large tables without explicit PKs
+            if (table.RowCount > 10000 && table.PrimaryKeyInfo?.Strategy == "ImplicitRowId")
             {
-                return "WITHOUT ROWID (no implicit rowid)";
+                suggestions.Add($"Consider adding explicit primary key to table '{table.Name}' ({table.RowCount:N0} rows)");
+            }
+
+            // Suggest indexes for foreign key-like columns
+            var fkCandidates = table.Columns
+                .Where(c => c.Name.EndsWith("_id", StringComparison.OrdinalIgnoreCase) || 
+                           c.Name.EndsWith("id", StringComparison.OrdinalIgnoreCase))
+                .Where(c => !c.IsPrimaryKey && c.DistinctValues > 1 && c.DistinctValues < table.RowCount * 0.8)
+                .ToList();
+                
+            foreach (var candidate in fkCandidates)
+            {
+                suggestions.Add($"Consider adding index on '{table.Name}.{candidate.Name}' (likely foreign key, {candidate.DistinctValues:N0} distinct values)");
             }
         }
-        catch { }
-
-        return "rowid (implicit SQLite rowid)";
+        
+        return suggestions;
     }
 
     private static List<Dictionary<string, object?>> GetDataSample(SqliteConnection connection, string tableName, List<ColumnAnalysis> columns, int sampleSize)
@@ -389,18 +432,28 @@ public static class AnalyzeCommand
     {
         var metrics = new PerformanceMetrics();
         
-        // This would include index analysis, query performance suggestions, etc.
-        // Based on Filters.md vision for performance optimization
-        
         metrics.TotalTables = tables.Count;
         metrics.TotalRows = tables.Sum(t => Math.Max(0, t.RowCount));
         metrics.LargestTable = tables.OrderByDescending(t => t.RowCount).FirstOrDefault()?.Name ?? "N/A";
         
-        // Suggest missing indexes for large tables
-        metrics.IndexSuggestions = tables
-            .Where(t => t.RowCount > 10000 && t.PrimaryKeyStrategy == "rowid (implicit SQLite rowid)")
-            .Select(t => $"Consider adding explicit primary key to table '{t.Name}' ({t.RowCount} rows)")
+        // Use enhanced index suggestion analysis
+        metrics.IndexSuggestions = SuggestMissingIndexes(connection, tables);
+        
+        // Add PK quality analysis
+        var lowQualityPks = tables
+            .Where(t => t.PrimaryKeyInfo?.QualityScore < 0.8)
             .ToList();
+            
+        if (lowQualityPks.Any())
+        {
+            metrics.PrimaryKeyIssues = lowQualityPks
+                .Select(t => $"Table '{t.Name}' has low-quality PK strategy: {t.PrimaryKeyInfo?.Strategy} (score: {t.PrimaryKeyInfo?.QualityScore:P0})")
+                .ToList();
+        }
+        else
+        {
+            metrics.PrimaryKeyIssues = new List<string>();
+        }
 
         return metrics;
     }
@@ -464,15 +517,34 @@ public static class AnalyzeCommand
         tablesTable.AddColumn("Columns");
         tablesTable.AddColumn("Rows");
         tablesTable.AddColumn("PK Strategy");
+        tablesTable.AddColumn("PK Quality");
+        tablesTable.AddColumn("Ordering");
 
         foreach (var table in analysis.Tables)
         {
+            var qualityDisplay = table.PrimaryKeyInfo?.QualityScore switch
+            {
+                >= 0.9 => "[green]Excellent[/]",
+                >= 0.8 => "[yellow]Good[/]",
+                >= 0.6 => "[orange]Fair[/]",
+                _ => "[red]Poor[/]"
+            };
+            
+            var orderingDisplay = table.PrimaryKeyInfo?.DeterministicOrdering switch
+            {
+                "Guaranteed" => "[green]Guaranteed[/]",
+                "Best-effort" => "[yellow]Best-effort[/]",
+                _ => "[red]None[/]"
+            };
+
             tablesTable.AddRow(
                 table.Name,
                 table.Type,
                 table.Columns.Count.ToString(),
                 table.RowCount >= 0 ? table.RowCount.ToString("N0") : "Error",
-                table.PrimaryKeyStrategy ?? "Unknown"
+                table.PrimaryKeyStrategy ?? "Unknown",
+                qualityDisplay,
+                orderingDisplay
             );
         }
 
@@ -515,6 +587,16 @@ public static class AnalyzeCommand
                 foreach (var suggestion in analysis.PerformanceMetrics.IndexSuggestions)
                 {
                     AnsiConsole.MarkupLine($"  • {suggestion}");
+                }
+            }
+            
+            if (analysis.PerformanceMetrics.PrimaryKeyIssues?.Any() == true)
+            {
+                AnsiConsole.WriteLine();
+                AnsiConsole.MarkupLine("[red]Primary Key Issues:[/]");
+                foreach (var issue in analysis.PerformanceMetrics.PrimaryKeyIssues)
+                {
+                    AnsiConsole.MarkupLine($"  • {issue}");
                 }
             }
         }
@@ -581,8 +663,7 @@ public static class AnalyzeCommand
     }
 }
 
-// Simple data structures for console tool
-public record TableInfo(string Name, string Type);
+// Simple data structures for console tool  
 public record ColumnInfo(string Name, string Type, bool NotNull, string? DefaultValue, int PrimaryKey);
 
 // Analysis data structures
@@ -615,6 +696,7 @@ public class TableAnalysis
     public long RowCount { get; set; }
     public List<ColumnAnalysis> Columns { get; set; } = new();
     public string? PrimaryKeyStrategy { get; set; }
+    public PrimaryKeyAnalysis? PrimaryKeyInfo { get; set; }
     public List<Dictionary<string, object?>> DataSample { get; set; } = new();
 }
 
@@ -643,4 +725,14 @@ public class PerformanceMetrics
     public long TotalRows { get; set; }
     public string LargestTable { get; set; } = string.Empty;
     public List<string> IndexSuggestions { get; set; } = new();
+    public List<string> PrimaryKeyIssues { get; set; } = new();
+}
+
+public class PrimaryKeyAnalysis
+{
+    public string Strategy { get; set; } = string.Empty;
+    public List<string> Columns { get; set; } = new();
+    public bool IsGuaranteed { get; set; }
+    public double QualityScore { get; set; }
+    public string DeterministicOrdering { get; set; } = string.Empty;
 }

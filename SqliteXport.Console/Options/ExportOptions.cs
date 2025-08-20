@@ -43,6 +43,15 @@ public class ExportOptions : GlobalOptions
     [Option("where", Required = false, HelpText = "SQL WHERE clause for row filtering.")]
     public string? Where { get; set; }
 
+    [Option("filter", Required = false, HelpText = "JSON SelectionGrammar filter file for advanced filtering.")]
+    public string? FilterFile { get; set; }
+
+    [Option("order-by", Required = false, HelpText = "Column(s) to order by: 'column' or 'column1,column2'.")]
+    public string? OrderBy { get; set; }
+
+    [Option("order-desc", Required = false, HelpText = "Sort in descending order.")]
+    public bool OrderDesc { get; set; }
+
     [Option("max-rows", Required = false, HelpText = "Maximum rows per table.")]
     public int? MaxRows { get; set; }
 
@@ -88,4 +97,20 @@ public class ExportOptions : GlobalOptions
 
     [Option("strict", Required = false, HelpText = "Fail on transformer errors (default: log and continue).")]
     public bool Strict { get; set; }
+
+    // Delta export options
+    [Option("delta", Required = false, HelpText = "Enable delta export mode.")]
+    public bool Delta { get; set; }
+
+    [Option("delta-strategy", Required = false, HelpText = "Delta strategy: watermark, changelog, full.")]
+    public string? DeltaStrategy { get; set; }
+
+    [Option("checkpoint-file", Required = false, HelpText = "Path to delta checkpoint file.")]
+    public string? CheckpointFile { get; set; }
+
+    [Option("watermark-columns", Required = false, HelpText = "Comma-separated watermark columns for delta mode.")]
+    public string? WatermarkColumns { get; set; }
+
+    [Option("install-changelog", Required = false, HelpText = "Install changelog triggers for delta tracking.")]
+    public bool InstallChangelog { get; set; }
 }

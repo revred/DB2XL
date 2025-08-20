@@ -2,6 +2,7 @@ using System.Globalization;
 using DB2XL.Configuration;
 using DB2XL.Transformers;
 using DB2XL.DeltaExport;
+using DB2XL.Query;
 
 namespace DB2XL;
 
@@ -94,4 +95,10 @@ public sealed class SqliteToExcelOptions
     /// If not provided, file-based checkpoint service will be used
     /// </summary>
     public IDeltaCheckpointService? DeltaCheckpointService { get; init; } = null;
+    
+    /// <summary>
+    /// Advanced selection grammar for sophisticated filtering and querying
+    /// When provided, overrides simple table name filtering
+    /// </summary>
+    public SelectionGrammar? SelectionGrammar { get; init; } = null;
 }

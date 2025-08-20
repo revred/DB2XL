@@ -1,0 +1,6 @@
+{
+  "$schema": "https://db2xl.org/schemas/selection-grammar.json",
+  "_comment": "Simple filter: Select all columns from users table",
+  "table": "users",
+  "select": ["*"]
+}

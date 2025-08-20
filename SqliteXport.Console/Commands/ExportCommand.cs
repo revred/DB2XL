@@ -1,10 +1,14 @@
 using DB2XL;
 using DB2XL.Configuration;
 using DB2XL.Transformers;
+using DB2XL.Query;
+using DB2XL.DeltaExport;
 using SqliteXport.Console.Options;
 using SqliteXport.Console.Helpers;
 using Spectre.Console;
 using System.Globalization;
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
 
 namespace SqliteXport.Console.Commands;
 
@@ -20,6 +24,18 @@ public static class ExportCommand
             if (!ValidateInputs(options))
                 return 1;
 
+            // Handle delta trigger installation if requested
+            if (options.InstallChangelog)
+            {
+                using var connection = new SqliteConnection($"Data Source={options.Database};");
+                connection.Open();
+                if (await HandleDeltaExport(options, connection))
+                {
+                    AnsiConsole.MarkupLine("[green]✓[/] Changelog triggers installed successfully.");
+                    return 0;
+                }
+            }
+
             // Show dry-run information if requested
             if (options.DryRun)
             {
@@ -31,6 +47,12 @@ public static class ExportCommand
             if (options.Count)
             {
                 return ShowCount(options);
+            }
+
+            // Handle delta export if requested
+            if (options.Delta)
+            {
+                return await ExecuteDeltaExport(options);
             }
 
             // Determine output format
@@ -103,6 +125,34 @@ public static class ExportCommand
             return false;
         }
 
+        // Validate filter file
+        if (!string.IsNullOrEmpty(options.FilterFile) && !File.Exists(options.FilterFile))
+        {
+            AnsiConsole.MarkupLine($"[red]✗ Error:[/] Filter file not found: {options.FilterFile}");
+            return false;
+        }
+
+        // Validate delta options
+        if (options.Delta)
+        {
+            if (!string.IsNullOrEmpty(options.DeltaStrategy))
+            {
+                var validStrategies = new[] { "watermark", "changelog", "full" };
+                if (!validStrategies.Contains(options.DeltaStrategy.ToLowerInvariant()))
+                {
+                    AnsiConsole.MarkupLine($"[red]✗ Error:[/] Invalid delta strategy. Valid options: {string.Join(", ", validStrategies)}");
+                    return false;
+                }
+            }
+        }
+
+        // Validate mutual exclusion: WHERE and filter file
+        if (!string.IsNullOrEmpty(options.Where) && !string.IsNullOrEmpty(options.FilterFile))
+        {
+            AnsiConsole.MarkupLine("[red]✗ Error:[/] Cannot specify both --where and --filter options. Use one or the other.");
+            return false;
+        }
+
         return true;
     }
 
@@ -131,6 +181,9 @@ public static class ExportCommand
 
     private static SqliteToExcelOptions BuildExportOptions(ExportOptions options, TransformationConfig? transformConfig)
     {
+        // Load SelectionGrammar if provided
+        var selectionGrammar = LoadSelectionGrammar(options);
+        
         // Determine dual export strategy
         var dualStrategy = DualExportStrategy.TransformedOnly;
         if (options.DualWorkbooks)
@@ -181,7 +234,8 @@ public static class ExportCommand
             TableNameLikeFilter = tableFilter,
             TransformationConfig = transformConfig,
             TransformerRegistry = transformConfig != null ? TransformerRegistryBuilder.CreateDefault() : null,
-            DualExportStrategy = dualStrategy
+            DualExportStrategy = dualStrategy,
+            SelectionGrammar = selectionGrammar
         };
 
         return exportOptions;
@@ -271,7 +325,16 @@ public static class ExportCommand
         table.AddRow("Config", options.Config ?? "None");
         table.AddRow("Tables", options.Tables ?? "All");
         table.AddRow("Where", options.Where ?? "None");
+        table.AddRow("Filter File", options.FilterFile ?? "None");
+        table.AddRow("Order By", options.OrderBy ?? "Deterministic");
         table.AddRow("Max Rows", options.MaxRows?.ToString() ?? "Unlimited");
+        table.AddRow("Delta Mode", options.Delta ? "Yes" : "No");
+        if (options.Delta)
+        {
+            table.AddRow("Delta Strategy", options.DeltaStrategy ?? "watermark");
+            table.AddRow("Checkpoint File", options.CheckpointFile ?? "Auto-generated");
+            table.AddRow("Watermark Columns", options.WatermarkColumns ?? "Auto-detected");
+        }
 
         AnsiConsole.Write(table);
     }
@@ -282,9 +345,31 @@ public static class ExportCommand
         {
             AnsiConsole.MarkupLine("[blue]ℹ[/] Counting rows...");
             
-            // This would be implemented with the database introspection from Filters.md
-            // For now, show a placeholder
-            AnsiConsole.MarkupLine("[yellow]⚠[/] Count functionality not yet implemented - requires database introspection API");
+            using var connection = new SqliteConnection($"Data Source={options.Database};Mode=ReadOnly;");
+            connection.Open();
+            
+            var objects = DatabaseDiscovery.GetObjects(connection, null, options.IncludeViews);
+            var filteredObjects = objects.Where(o => string.IsNullOrEmpty(options.Tables) || 
+                options.Tables.Split(',').Any(t => o.Name.Contains(t.Trim())));
+            
+            long totalRows = 0;
+            var table = new Table();
+            table.AddColumn("Table");
+            table.AddColumn("Rows", c => c.RightAligned());
+            
+            foreach (var obj in filteredObjects)
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"SELECT COUNT(*) FROM \"{obj.Name.Replace("\"", "\"\"")}\"";
+                var count = Convert.ToInt64(cmd.ExecuteScalar());
+                totalRows += count;
+                table.AddRow(obj.Name, count.ToString("N0"));
+            }
+            
+            table.AddEmptyRow();
+            table.AddRow("[bold]Total[/]", $"[bold]{totalRows:N0}[/]");
+            
+            AnsiConsole.Write(table);
             return 0;
         }
         catch (Exception ex)
@@ -293,4 +378,163 @@ public static class ExportCommand
             return 1;
         }
     }
+
+    private static SelectionGrammar? LoadSelectionGrammar(ExportOptions options)
+    {
+        if (string.IsNullOrEmpty(options.FilterFile))
+            return null;
+
+        try
+        {
+            var json = File.ReadAllText(options.FilterFile);
+            return JsonSerializer.Deserialize<SelectionGrammar>(json);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load filter file '{options.FilterFile}': {ex.Message}", ex);
+        }
+    }
+
+    private static async Task<bool> HandleDeltaExport(ExportOptions options, SqliteConnection connection)
+    {
+        if (!options.Delta)
+            return false;
+
+        var strategy = options.DeltaStrategy?.ToLowerInvariant() ?? "watermark";
+        
+        if (options.InstallChangelog && strategy == "changelog")
+        {
+            AnsiConsole.MarkupLine("[blue]ℹ[/] Installing changelog triggers...");
+            
+            var changeLogService = new ChangeLogDeltaService(null, new PrimaryKeyDiscoveryService());
+            var tables = DatabaseDiscovery.GetObjects(connection, null, false);
+            
+            foreach (var table in tables)
+            {
+                var config = new ChangeLogConfig { CaptureFullRowData = true };
+                await changeLogService.InstallChangeTrackingAsync(connection, table.Name, config);
+                AnsiConsole.MarkupLine($"[green]✓[/] Installed triggers for table: {table.Name}");
+            }
+            
+            return true; // Exit after installing triggers
+        }
+
+        return false;
+    }
+
+    private static async Task<int> ExecuteDeltaExport(ExportOptions options)
+    {
+        try
+        {
+            AnsiConsole.MarkupLine("[blue]ℹ[/] Starting delta export...");
+            
+            var format = DetermineFormat(options);
+            var strategy = options.DeltaStrategy?.ToLowerInvariant() ?? "watermark";
+            
+            // Build delta export configuration
+            var deltaConfig = BuildDeltaExportConfig(options, strategy);
+            
+            // Create modified export options for delta export
+            var transformConfig = LoadTransformationConfig(options);
+            var exportOptions = BuildExportOptions(options, transformConfig);
+            
+            // Use existing delta export API via DeltaExportExtensions
+            
+            await AnsiConsole.Progress().StartAsync(async ctx =>
+            {
+                var progressTask = ctx.AddTask("[green]Processing delta export[/]");
+                
+                if (format.Equals("jsonl", StringComparison.OrdinalIgnoreCase))
+                {
+                    AnsiConsole.MarkupLine("[yellow]⚠[/] Delta export for JSONL format not yet implemented - falling back to regular export");
+                    await ExportJsonl(options, exportOptions, progressTask);
+                }
+                else
+                {
+                    // Use SqliteToExcel delta export functionality
+                    progressTask.Description = "[green]Exporting with delta processing[/]";
+                    
+                    await Task.Run(async () =>
+                    {
+                        // Create delta-enabled options
+                        var deltaOptions = new SqliteToExcelOptions
+                        {
+                            WriteAllAsText = exportOptions.WriteAllAsText,
+                            PreserveNumericTypes = exportOptions.PreserveNumericTypes,
+                            IncludeMetadataSheet = exportOptions.IncludeMetadataSheet,
+                            ReadBatchSize = exportOptions.ReadBatchSize,
+                            CommandTimeoutSeconds = exportOptions.CommandTimeoutSeconds,
+                            IncludeViews = exportOptions.IncludeViews,
+                            OrderRowsDeterministically = exportOptions.OrderRowsDeterministically,
+                            SplitOversizeSheets = exportOptions.SplitOversizeSheets,
+                            BlobMode = exportOptions.BlobMode,
+                            TableNameLikeFilter = exportOptions.TableNameLikeFilter,
+                            TransformationConfig = exportOptions.TransformationConfig,
+                            TransformerRegistry = exportOptions.TransformerRegistry,
+                            DualExportStrategy = exportOptions.DualExportStrategy,
+                            DeltaExportConfig = deltaConfig
+                        };
+                        
+                        await SqliteToExcelDeltaExtensions.ExportDeltaAsync(options.Database, options.Output, deltaOptions);
+                    });
+                }
+                
+                progressTask.Value = 100;
+            });
+            
+            AnsiConsole.MarkupLine($"[green]✓[/] Delta export completed: {options.Output}");
+            
+            // Show checkpoint information if available
+            var checkpointPath = options.CheckpointFile ?? Path.ChangeExtension(options.Output, ".checkpoint.json");
+            if (File.Exists(checkpointPath))
+            {
+                AnsiConsole.MarkupLine($"[blue]ℹ[/] Checkpoint saved: {checkpointPath}");
+            }
+            
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ Delta export failed:[/] {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static DeltaExportConfig BuildDeltaExportConfig(ExportOptions options, string strategy)
+    {
+        return strategy switch
+        {
+            "watermark" => new DeltaExportConfig
+            {
+                Strategy = DeltaStrategy.Watermark,
+                WatermarkColumns = ParseWatermarkColumns(options.WatermarkColumns)
+            },
+            "changelog" => new DeltaExportConfig
+            {
+                Strategy = DeltaStrategy.ChangeLog,
+                ChangeLogConfig = new ChangeLogConfig
+                {
+                    ChangeLogTableName = "__changes",
+                    CaptureFullRowData = true,
+                    AutoInstallTriggers = false
+                }
+            },
+            "full" => new DeltaExportConfig
+            {
+                Strategy = DeltaStrategy.Full
+            },
+            _ => throw new ArgumentException($"Unsupported delta strategy: {strategy}")
+        };
+    }
+
+    private static IReadOnlyList<string> ParseWatermarkColumns(string? watermarkColumns)
+    {
+        if (string.IsNullOrEmpty(watermarkColumns))
+            return Array.Empty<string>();
+            
+        return watermarkColumns.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(c => c.Trim())
+            .ToArray();
+    }
+
 }

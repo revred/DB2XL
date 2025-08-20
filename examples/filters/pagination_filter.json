@@ -1,0 +1,20 @@
+{
+  "$schema": "https://db2xl.org/schemas/selection-grammar.json",
+  "_comment": "Pagination example: Get page 3 with 50 records per page",
+  "table": "products",
+  "select": ["product_id", "name", "category", "price", "stock_quantity"],
+  "where": {
+    "type": "comparison",
+    "column": "active",
+    "operator": "=",
+    "value": true
+  },
+  "orderBy": [
+    {
+      "column": "product_id",
+      "direction": "asc"
+    }
+  ],
+  "limit": 50,
+  "offset": 100
+}

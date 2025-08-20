@@ -324,11 +324,86 @@ DB2XL includes built-in validation. Check the metadata sheet for:
 dotnet test --filter "ExportValidator"
 ```
 
+## 🎯 Step 8: Advanced Features (New!)
+
+### JSON-Based Advanced Filtering
+Use SelectionGrammar for sophisticated queries without complex SQL:
+
+```bash
+# Create a filter file
+cat > query.json << EOF
+{
+  "table": "orders",
+  "select": ["order_id", "customer_id", "total", "status"],
+  "where": {
+    "type": "and",
+    "conditions": [
+      {"type": "comparison", "column": "total", "operator": ">", "value": "1000"},
+      {"type": "comparison", "column": "status", "operator": "=", "value": "pending"}
+    ]
+  },
+  "orderBy": [{"column": "total", "direction": "desc"}],
+  "limit": 100
+}
+EOF
+
+# Apply the filter
+dotnet run --project SqliteXport.Console -- export database.sqlite filtered.xlsx --filter query.json
+```
+
+### Delta Exports (Incremental Changes)
+Export only what's changed since your last export:
+
+```bash
+# Watermark-based delta export (auto-detects timestamp columns)
+dotnet run --project SqliteXport.Console -- export db.sqlite changes.xlsx --delta
+
+# Specify watermark columns
+dotnet run --project SqliteXport.Console -- export db.sqlite delta.xlsx \
+  --delta --watermark-columns "updated_at,modified_at"
+
+# Use checkpoint for true incremental exports
+dotnet run --project SqliteXport.Console -- export db.sqlite incremental.xlsx \
+  --delta --checkpoint-file last_export.json
+```
+
+### Change Log Tracking
+Track all database changes with automatic triggers:
+
+```bash
+# Install change tracking triggers
+dotnet run --project SqliteXport.Console -- export db.sqlite setup.xlsx --install-changelog
+
+# Export captured changes
+dotnet run --project SqliteXport.Console -- export db.sqlite changes.xlsx \
+  --delta --delta-strategy changelog
+```
+
+### Enhanced Database Analysis
+Discover primary keys and get performance recommendations:
+
+```bash
+# Full PK discovery with quality scores
+dotnet run --project SqliteXport.Console -- analyze db.sqlite \
+  --pk-discovery --pk-strategy --pk-quality --deterministic-order
+
+# Get index suggestions for large tables
+dotnet run --project SqliteXport.Console -- analyze db.sqlite \
+  --suggest-indexes --performance
+
+# Export analysis results
+dotnet run --project SqliteXport.Console -- analyze db.sqlite \
+  --output analysis.json --format json
+```
+
 ## 🎉 You're Ready!
 
 You now know how to:
-- ✅ **Analyze databases** quickly with the console tool
+- ✅ **Analyze databases** with PK discovery and performance metrics
 - ✅ **Export to Excel and JSONL** with perfect fidelity
+- ✅ **Use advanced filtering** with JSON SelectionGrammar files
+- ✅ **Perform delta exports** for incremental data processing
+- ✅ **Track changes** with automatic changelog triggers
 - ✅ **Use 22 built-in transformers** for human-readable output
 - ✅ **Configure transformations** with JSON/YAML files
 - ✅ **Handle large databases** and special cases
@@ -337,6 +412,9 @@ You now know how to:
 
 ## 🔗 Next Steps
 
+- **[Examples Directory](examples/)** - Ready-to-use examples for all features
+  - [Filter Examples](examples/filters/) - JSON SelectionGrammar samples
+  - [Delta Export Examples](examples/delta/) - Watermark and changelog strategies
 - **[Console Tool Guide](SqliteXport.Console.md)** - Complete console tool documentation
 - **[Complete specification](CLAUDE.md)** - Advanced library features
 - **[Transformer documentation](TRANSFORMERS.md)** - All 22 built-in transformers

@@ -31,4 +31,16 @@ public class AnalyzeOptions : GlobalOptions
 
     [Option("pk-discovery", Required = false, HelpText = "Analyze primary key and indexing strategies.")]
     public bool PkDiscovery { get; set; } = true;
+
+    [Option("pk-strategy", Required = false, HelpText = "Show which PK discovery strategy would be used for each table.")]
+    public bool ShowPkStrategy { get; set; }
+
+    [Option("pk-quality", Required = false, HelpText = "Analyze primary key quality and uniqueness characteristics.")]
+    public bool PkQuality { get; set; }
+
+    [Option("suggest-indexes", Required = false, HelpText = "Suggest missing indexes for better query performance.")]
+    public bool SuggestIndexes { get; set; }
+
+    [Option("deterministic-order", Required = false, HelpText = "Show deterministic ordering capabilities for each table.")]
+    public bool DeterministicOrder { get; set; }
 }

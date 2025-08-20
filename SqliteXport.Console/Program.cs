@@ -37,17 +37,26 @@ public class Program
         var panel = new Panel($"""
             [bold blue]SqliteXport Console[/] v{version}
             
-            [dim]Deterministic SQLite → Excel/JSONL exporter with transformation support[/]
-            [dim]AI-ready database analysis and export tool[/]
+            [dim]Deterministic SQLite → Excel/JSONL exporter with advanced filtering & delta exports[/]
+            [dim]AI-ready database analysis with PK discovery and performance optimization[/]
             
             [yellow]Commands:[/]
-              [green]export[/]   Export SQLite database to Excel or JSONL
-              [green]analyze[/]  Analyze database structure and content
+              [green]export[/]   Export SQLite database to Excel or JSONL with advanced filtering
+              [green]analyze[/]  Analyze database structure, PKs, and performance metrics
             
-            [yellow]Examples:[/]
+            [yellow]Basic Examples:[/]
               [dim]sqlitexport export data.db output.xlsx --transform[/]
-              [dim]sqlitexport analyze logs.db --include-data --performance[/]
-              [dim]sqlitexport export trades.db trades.jsonl --where "brokerage > 25"[/]
+              [dim]sqlitexport analyze logs.db --pk-discovery --suggest-indexes[/]
+              [dim]sqlitexport export trades.db trades.jsonl --where "amount > 1000"[/]
+            
+            [yellow]Advanced Filtering:[/]
+              [dim]sqlitexport export db.sqlite data.xlsx --filter query.json[/]
+              [dim]sqlitexport export db.sqlite data.xlsx --order-by "created_at" --order-desc[/]
+            
+            [yellow]Delta Exports:[/]
+              [dim]sqlitexport export db.sqlite delta.xlsx --delta --delta-strategy watermark[/]
+              [dim]sqlitexport export db.sqlite changes.xlsx --install-changelog[/]
+              [dim]sqlitexport export db.sqlite inc.xlsx --delta --checkpoint-file state.json[/]
             """)
             .Border(BoxBorder.Rounded)
             .BorderColor(Color.Blue);
