@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
 using DB2XL.Query;
+using DB2XL.Core.Models;
+using SortDirection = DB2XL.Core.Models.SortDirection;
 
 namespace DB2XL.DeltaExport;
 

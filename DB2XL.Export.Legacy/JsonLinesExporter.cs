@@ -7,6 +7,8 @@ using DB2XL.Transform.Configuration;
 using DB2XL.Transform.Interfaces;
 using DB2XL.Schema;
 using Microsoft.Extensions.Logging;
+using DB2XL.Core.Models;
+using DB2XL.Core.Enums;
 
 namespace DB2XL;
 
@@ -195,7 +197,7 @@ public static class JsonLinesExporter
     private static JsonLinesTableInfo ExportTable(
         SqliteConnection connection, 
         string outputDirectory, 
-        DB2XL.Core.Models.TableInfo table, 
+        TableInfo table, 
         JsonLinesExportOptions options, 
         TransformationPipeline? transformationPipeline,
         string fileSuffix)

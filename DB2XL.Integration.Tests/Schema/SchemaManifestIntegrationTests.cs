@@ -1,4 +1,5 @@
 using DB2XL.Core.Models;
+using DB2XL.Core.Enums;
 using DB2XL.Data.Schema;
 using DB2XL;
 using DB2XL.Schema;

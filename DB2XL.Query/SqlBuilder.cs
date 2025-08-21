@@ -1,14 +1,28 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using DB2XL.Core.Models;
+using SortDirection = DB2XL.Core.Models.SortDirection;
+using ComparisonExpression = DB2XL.Core.Models.ComparisonExpression;
+using LogicalExpression = DB2XL.Core.Models.LogicalExpression;
+using WhereExpression = DB2XL.Core.Models.WhereExpression;
+using LogicalOperator = DB2XL.Core.Models.LogicalOperator;
+using ComparisonOperator = DB2XL.Core.Models.ComparisonOperator;
 
 namespace DB2XL.Query;
 
 /// <summary>
-/// Builds safe, parameterized SQL queries from SelectionGrammar
+/// Builds safe, parameterized SQL queries from SelectionGrammar with v2 enhancements
 /// </summary>
 public sealed class SqlBuilder : ISqlBuilder
 {
+    private readonly JoinBuilder _joinBuilder;
+    
+    public SqlBuilder(SecurityFilter? securityFilter = null)
+    {
+        _joinBuilder = new JoinBuilder(securityFilter);
+    }
+    
     /// <summary>
     /// Builds a parameterized SELECT query from selection grammar
     /// </summary>
@@ -16,7 +30,110 @@ public sealed class SqlBuilder : ISqlBuilder
     {
         var parameters = new Dictionary<string, object?>();
         var sql = new StringBuilder();
+        var attachStatements = new List<string>();
         
+        // Check if this is an enhanced SelectionGrammar with v2 features
+        if (selection is SelectionGrammar enhancedSelection)
+        {
+            return BuildEnhancedQuery(enhancedSelection, parameters, sql, attachStatements);
+        }
+        
+        // Fallback to legacy query building
+        return BuildLegacyQuery(selection, parameters, sql);
+    }
+    
+    /// <summary>
+    /// Builds an enhanced query with v2 features (joins, attach, etc.)
+    /// </summary>
+    private ParameterizedSql BuildEnhancedQuery(SelectionGrammar selection, Dictionary<string, object?> parameters, StringBuilder sql, List<string> attachStatements)
+    {
+        // Handle ATTACH DATABASE statements first
+        if (selection.Attach.Any())
+        {
+            var attachResult = _joinBuilder.BuildAttachStatements(selection.Attach);
+            if (!attachResult.IsValid)
+            {
+                throw new InvalidOperationException($"Failed to build ATTACH statements: {string.Join("; ", attachResult.Errors)}");
+            }
+            
+            attachStatements.AddRange(attachResult.Statements);
+            foreach (var param in attachResult.Parameters)
+            {
+                parameters[param.Key] = param.Value;
+            }
+        }
+        
+        // SELECT clause
+        sql.Append("SELECT ");
+        AppendSelectClause(sql, selection.Select);
+        
+        // FROM clause
+        sql.Append(" FROM ");
+        AppendQuotedIdentifier(sql, selection.Table);
+        
+        // JOIN clauses
+        if (selection.Joins.Any())
+        {
+            var joinResult = _joinBuilder.BuildJoins(selection.Joins, parameters);
+            if (!joinResult.IsValid)
+            {
+                throw new InvalidOperationException($"Failed to build JOIN clauses: {string.Join("; ", joinResult.Errors)}");
+            }
+            
+            if (!string.IsNullOrEmpty(joinResult.Sql))
+            {
+                sql.Append(" ");
+                sql.Append(joinResult.Sql);
+            }
+        }
+        
+        // WHERE clause (use v2 if available, fall back to legacy)
+        if (selection.WhereV2 != null)
+        {
+            sql.Append(" WHERE ");
+            sql.Append(BuildWhereExpressionV2(selection.WhereV2, parameters));
+        }
+        else if (selection.Where != null)
+        {
+            sql.Append(" WHERE ");
+            sql.Append(selection.Where.ToSql(parameters));
+        }
+        
+        // ORDER BY clause (use v2 if available, fall back to legacy)
+        IReadOnlyList<IOrderByClause> orderByList = selection.OrderByV2.Any() ? 
+            selection.OrderByV2.Select(o => new LegacyOrderByClause { Column = o.Column, Direction = o.Direction }).ToList() :
+            selection.OrderBy;
+            
+        if (orderByList.Any())
+        {
+            sql.Append(" ORDER BY ");
+            AppendOrderByClause(sql, orderByList);
+        }
+        
+        // LIMIT and OFFSET (use pagination if available, fall back to individual properties)
+        var limit = selection.Pagination?.Limit ?? selection.Limit;
+        var offset = selection.Pagination?.Offset ?? selection.Offset;
+        
+        if (limit.HasValue)
+        {
+            sql.Append(" LIMIT ");
+            sql.Append(limit.Value);
+        }
+        
+        if (offset.HasValue)
+        {
+            sql.Append(" OFFSET ");
+            sql.Append(offset.Value);
+        }
+        
+        return new ParameterizedSql(sql.ToString(), parameters, attachStatements);
+    }
+    
+    /// <summary>
+    /// Builds a legacy query without v2 features
+    /// </summary>
+    private static ParameterizedSql BuildLegacyQuery(ISelectionGrammar selection, Dictionary<string, object?> parameters, StringBuilder sql)
+    {
         // SELECT clause
         sql.Append("SELECT ");
         AppendSelectClause(sql, selection.Select);
@@ -57,6 +174,76 @@ public sealed class SqlBuilder : ISqlBuilder
     }
     
     /// <summary>
+    /// Builds SQL for WhereExpression v2
+    /// </summary>
+    private static string BuildWhereExpressionV2(WhereExpression expression, Dictionary<string, object?> parameters)
+    {
+        return expression switch
+        {
+            DB2XL.Core.Models.ComparisonExpression comp => BuildComparisonExpression(comp, parameters),
+            DB2XL.Core.Models.LogicalExpression logical => BuildLogicalExpression(logical, parameters),
+            _ => throw new NotSupportedException($"Unsupported where expression type: {expression.GetType()}")
+        };
+    }
+    
+    /// <summary>
+    /// Builds SQL for a comparison expression
+    /// </summary>
+    private static string BuildComparisonExpression(DB2XL.Core.Models.ComparisonExpression comp, Dictionary<string, object?> parameters)
+    {
+        var column = $"\"{comp.Column.Replace("\"", "\"\"")}\"";
+        var op = comp.Operator switch
+        {
+            ComparisonOperator.Equal => "=",
+            ComparisonOperator.NotEqual => "!=",
+            ComparisonOperator.LessThan => "<",
+            ComparisonOperator.LessThanOrEqual => "<=",
+            ComparisonOperator.GreaterThan => ">",
+            ComparisonOperator.GreaterThanOrEqual => ">=",
+            ComparisonOperator.Like => "LIKE",
+            ComparisonOperator.In => "IN",
+            ComparisonOperator.NotIn => "NOT IN",
+            ComparisonOperator.Between => "BETWEEN",
+            ComparisonOperator.IsNull => "IS NULL",
+            ComparisonOperator.IsNotNull => "IS NOT NULL",
+            _ => throw new NotSupportedException($"Unsupported operator: {comp.Operator}")
+        };
+        
+        if (comp.Operator is ComparisonOperator.IsNull or ComparisonOperator.IsNotNull)
+        {
+            return $"{column} {op}";
+        }
+        
+        var paramName = comp.ParameterName;
+        parameters[paramName] = comp.Value;
+        
+        return comp.Operator switch
+        {
+            ComparisonOperator.In or ComparisonOperator.NotIn when comp.Value is System.Collections.IEnumerable enumerable => 
+                $"{column} {op} ({string.Join(",", enumerable.Cast<object>().Select((_, i) => $"@{paramName}_{i}"))})",
+            ComparisonOperator.Between when comp.Value is object[] arr && arr.Length == 2 =>
+                $"{column} {op} @{paramName}_0 AND @{paramName}_1",
+            _ => $"{column} {op} @{paramName}"
+        };
+    }
+    
+    /// <summary>
+    /// Builds SQL for a logical expression
+    /// </summary>
+    private static string BuildLogicalExpression(DB2XL.Core.Models.LogicalExpression logical, Dictionary<string, object?> parameters)
+    {
+        if (!logical.Expressions.Any())
+        {
+            return "1=1";
+        }
+        
+        var op = logical.Operator == LogicalOperator.And ? "AND" : "OR";
+        var expressions = logical.Expressions.Select(expr => BuildWhereExpressionV2(expr, parameters));
+        
+        return $"({string.Join($" {op} ", expressions)})";
+    }
+    
+    /// <summary>
     /// Builds a parameterized COUNT query from selection grammar
     /// </summary>
     public ParameterizedSql BuildCountQuery(ISelectionGrammar selection)
@@ -76,10 +263,13 @@ public sealed class SqlBuilder : ISqlBuilder
         }
         
         // Note: No ORDER BY, LIMIT, or OFFSET for count queries
+        // TODO: Add v2 features support when SelectionGrammar is extended
         
         return new ParameterizedSql(sql.ToString(), parameters);
     }
     
+    // SortDirection conversion methods removed - now using Core.Models.SortDirection directly
+
     /// <summary>
     /// Appends SELECT clause with column projections
     /// </summary>
@@ -241,6 +431,15 @@ public sealed class SqlBuilder : ISqlBuilder
         return !dangerousKeywords.Any(keyword => 
             lowerExpression.Contains(keyword, StringComparison.OrdinalIgnoreCase));
     }
+}
+
+/// <summary>
+/// Legacy adapter for OrderByInfo to IOrderByClause
+/// </summary>
+internal sealed class LegacyOrderByClause : IOrderByClause
+{
+    public string Column { get; init; } = string.Empty;
+    public SortDirection Direction { get; init; } = SortDirection.Ascending;
 }
 
 /// <summary>

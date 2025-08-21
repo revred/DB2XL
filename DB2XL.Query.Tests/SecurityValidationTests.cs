@@ -2,6 +2,7 @@ using DB2XL.Query;
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
 using Xunit;
+using DB2XL.Core.Models;
 
 namespace DB2XL.Query.Tests
 {

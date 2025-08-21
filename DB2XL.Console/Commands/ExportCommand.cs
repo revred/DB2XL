@@ -6,6 +6,7 @@ using DB2XL.DeltaExport;
 using DB2XL.Console.Options;
 using DB2XL.Console.Helpers;
 using DB2XL.Core.Models;
+using DB2XL.Core.Enums;
 using DB2XL.Data.Schema;
 using Spectre.Console;
 using System.Globalization;

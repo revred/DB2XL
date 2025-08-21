@@ -1,5 +1,8 @@
 using Microsoft.Data.Sqlite;
 using System.Text.Json.Serialization;
+using DB2XL.Core.Models;
+using SortDirection = DB2XL.Core.Models.SortDirection;
+using ComparisonOperator = DB2XL.Core.Models.ComparisonOperator;
 
 namespace DB2XL.Query;
 
@@ -70,34 +73,8 @@ public interface IOrderByClause
     SortDirection Direction { get; }
 }
 
-/// <summary>
-/// Sort direction enumeration
-/// </summary>
-public enum SortDirection
-{
-    Ascending,
-    Descending
-}
-
-/// <summary>
-/// Comparison operators for WHERE clauses
-/// </summary>
-public enum ComparisonOperator
-{
-    Equal,
-    NotEqual,
-    LessThan,
-    LessThanOrEqual,
-    GreaterThan,
-    GreaterThanOrEqual,
-    In,
-    NotIn,
-    Like,
-    Glob,
-    Between,
-    IsNull,
-    IsNotNull
-}
+// SortDirection moved to DB2XL.Core.Models to avoid duplication
+// ComparisonOperator moved to DB2XL.Core.Models to avoid duplication
 
 /// <summary>
 /// Converts selection grammar to parameterized SQL
@@ -120,9 +97,15 @@ public interface ISqlBuilder
 }
 
 /// <summary>
-/// Represents a SQL query with its parameters
+/// Represents a SQL query with its parameters and optional attach statements
 /// </summary>
-public sealed record ParameterizedSql(string Sql, Dictionary<string, object?> Parameters);
+public sealed record ParameterizedSql(
+    string Sql, 
+    Dictionary<string, object?> Parameters,
+    IReadOnlyList<string>? AttachStatements = null)
+{
+    public bool HasAttachStatements => AttachStatements?.Count > 0;
+}
 
 /// <summary>
 /// Executes parameterized SQL queries safely

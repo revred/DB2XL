@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DB2XL.Core.Models;
+using DB2XL.Core.Enums;
+using SortDirection = DB2XL.Core.Models.SortDirection;
 
 namespace DB2XL.Query;
 
@@ -26,6 +29,38 @@ public sealed record SelectionGrammar : ISelectionGrammar
     
     [JsonPropertyName("offset")]
     public int? Offset { get; init; }
+    
+    // V2 Enhanced Properties
+    
+    /// <summary>
+    /// ATTACH DATABASE statements for multi-database operations
+    /// </summary>
+    [JsonPropertyName("attach")]
+    public IReadOnlyList<AttachInfo> Attach { get; init; } = Array.Empty<AttachInfo>();
+    
+    /// <summary>
+    /// JOIN operations for multi-table queries
+    /// </summary>
+    [JsonPropertyName("joins")]
+    public IReadOnlyList<JoinInfo> Joins { get; init; } = Array.Empty<JoinInfo>();
+    
+    /// <summary>
+    /// Enhanced WHERE expressions with nested AND/OR support
+    /// </summary>
+    [JsonPropertyName("whereV2")]
+    public WhereExpression? WhereV2 { get; init; }
+    
+    /// <summary>
+    /// Enhanced ORDER BY clauses
+    /// </summary>
+    [JsonPropertyName("orderByV2")]
+    public IReadOnlyList<OrderByInfo> OrderByV2 { get; init; } = Array.Empty<OrderByInfo>();
+    
+    /// <summary>
+    /// Consolidated pagination settings
+    /// </summary>
+    [JsonPropertyName("pagination")]
+    public PaginationInfo? Pagination { get; init; }
     
     /// <summary>
     /// Creates a simple selection for a table with all columns

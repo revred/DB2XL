@@ -39,7 +39,12 @@
       "Bash(del DB2XL.Core.TestsUnitTest1.cs)",
       "Bash(echo \"Exit code: $?\")",
       "Bash(.DB2XL.ConsolebinDebugnet9.0DB2XL.Console.exe --version)",
-      "Bash(DB2XL.Console/bin/Debug/net9.0/DB2XL.Console.exe --version)"
+      "Bash(DB2XL.Console/bin/Debug/net9.0/DB2XL.Console.exe --version)",
+      "Bash(git checkout:*)",
+      "Bash(del \"C:\\code\\DB2XL\\DB2XL.Core\\Interfaces\\IPrimaryKeyDiscoveryService.cs\")",
+      "Bash(for file in MissingIndexDetectorTests FilteringBenchmarkTests SecurityValidationTests SqlInjectionValidatorTests SecurityFilterTests SelectionGrammarTests)",
+      "Bash(do echo \"Processing $file.cs\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": [],

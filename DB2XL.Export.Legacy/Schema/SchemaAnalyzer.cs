@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using System.Text.Json;
 using DB2XL.Transform.Configuration;
 using DB2XL.Transform.Interfaces;
+using DB2XL.Core.Models;
 
 namespace DB2XL.Schema;
 
@@ -66,7 +67,7 @@ public static class SchemaAnalyzer
     /// Analyzes a single table/view schema
     /// </summary>
     internal static TableSchema AnalyzeTable(SqliteConnection connection, 
-        DB2XL.Core.Models.TableInfo table, 
+        TableInfo table, 
         SqliteToExcelOptions options,
         TransformationPipeline? transformationPipeline = null)
     {
@@ -105,7 +106,7 @@ public static class SchemaAnalyzer
     /// </summary>
     internal static ColumnSchema AnalyzeColumn(SqliteConnection connection, 
         string tableName, 
-        DB2XL.Core.Models.ColumnInfo column,
+        ColumnInfo column,
         TransformationPipeline? transformationPipeline = null)
     {
         var columnSchema = new ColumnSchema

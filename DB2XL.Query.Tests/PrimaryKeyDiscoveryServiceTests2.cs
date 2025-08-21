@@ -1,8 +1,9 @@
 using Microsoft.Data.Sqlite;
-using DB2XL.Data.Schema;
+using DB2XL.Query;
 using DB2XL.Core.Models;
+using Xunit;
 
-namespace DB2XL.Core.Tests.Data;
+namespace DB2XL.Query.Tests;
 
 public class PrimaryKeyDiscoveryServiceTests : IDisposable
 {

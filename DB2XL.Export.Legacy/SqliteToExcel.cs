@@ -169,7 +169,7 @@ public static class SqliteToExcel
     private static void ExportTable(
         SqliteConnection connection,
         XLWorkbook workbook,
-        DB2XL.Core.Models.TableInfo table,
+        TableInfo table,
         SqliteToExcelOptions options,
         HashSet<string> usedSheetNames,
         List<MetaRow>? metadataRows,
@@ -184,7 +184,7 @@ public static class SqliteToExcel
         }
         
         // Determine which columns will actually be returned by the query
-        List<DB2XL.Core.Models.ColumnInfo> columnsToExport;
+        List<ColumnInfo> columnsToExport;
         if (options.SelectionGrammar != null && 
             options.SelectionGrammar.Table.Equals(table.Name, StringComparison.OrdinalIgnoreCase))
         {
@@ -196,7 +196,7 @@ public static class SqliteToExcel
             else
             {
                 // Map selected column names to ColumnInfo objects
-                columnsToExport = new List<DB2XL.Core.Models.ColumnInfo>();
+                columnsToExport = new List<ColumnInfo>();
                 foreach (var selectedColumn in options.SelectionGrammar.Select)
                 {
                     var columnInfo = allColumns.FirstOrDefault(c => c.Name.Equals(selectedColumn, StringComparison.OrdinalIgnoreCase));
@@ -319,7 +319,7 @@ public static class SqliteToExcel
     private static void ExportTableWithSuffix(
         SqliteConnection connection,
         XLWorkbook workbook,
-        DB2XL.Core.Models.TableInfo table,
+        TableInfo table,
         SqliteToExcelOptions options,
         HashSet<string> usedSheetNames,
         List<MetaRow>? metadataRows,
@@ -872,9 +872,9 @@ public static class SqliteToExcel
     /// <summary>
     /// Gets tables to export based on options, with SelectionGrammar support and security filtering
     /// </summary>
-    private static List<DB2XL.Core.Models.TableInfo> GetTablesToExport(SqliteConnection connection, SqliteToExcelOptions options)
+    private static List<TableInfo> GetTablesToExport(SqliteConnection connection, SqliteToExcelOptions options)
     {
-        List<DB2XL.Core.Models.TableInfo> tables;
+        List<TableInfo> tables;
         
         if (options.SelectionGrammar != null)
         {
@@ -899,7 +899,7 @@ public static class SqliteToExcel
     /// <summary>
     /// Processes SelectionGrammar to get table information with security filtering support
     /// </summary>
-    private static List<DB2XL.Core.Models.TableInfo> GetTablesFromSelectionGrammar(SqliteConnection connection, SelectionGrammar grammar, SecurityFilterConfig? securityConfig)
+    private static List<TableInfo> GetTablesFromSelectionGrammar(SqliteConnection connection, SelectionGrammar grammar, SecurityFilterConfig? securityConfig)
     {
         // Validate SelectionGrammar for security compliance if configured
         if (securityConfig != null)
@@ -912,7 +912,7 @@ public static class SqliteToExcel
             }
         }
         
-        var result = new List<DB2XL.Core.Models.TableInfo>();
+        var result = new List<TableInfo>();
         
         // Validate the table exists
         var tableInfo = SqliteSchemaReader.GetDatabaseObjects(connection, null, true)
@@ -934,10 +934,10 @@ public static class SqliteToExcel
     /// <summary>
     /// Applies security filtering to a list of tables
     /// </summary>
-    private static List<DB2XL.Core.Models.TableInfo> ApplySecurityFiltering(List<DB2XL.Core.Models.TableInfo> tables, SecurityFilterConfig securityConfig)
+    private static List<TableInfo> ApplySecurityFiltering(List<TableInfo> tables, SecurityFilterConfig securityConfig)
     {
         var securityFilter = new SecurityFilter(securityConfig);
-        var filteredTables = new List<DB2XL.Core.Models.TableInfo>();
+        var filteredTables = new List<TableInfo>();
         
         foreach (var table in tables)
         {
@@ -960,10 +960,10 @@ public static class SqliteToExcel
     /// <summary>
     /// Applies security filtering to columns based on security configuration
     /// </summary>
-    private static List<DB2XL.Core.Models.ColumnInfo> ApplyColumnSecurityFiltering(string tableName, List<DB2XL.Core.Models.ColumnInfo> columns, SecurityFilterConfig securityConfig)
+    private static List<ColumnInfo> ApplyColumnSecurityFiltering(string tableName, List<ColumnInfo> columns, SecurityFilterConfig securityConfig)
     {
         var securityFilter = new SecurityFilter(securityConfig);
-        var filteredColumns = new List<DB2XL.Core.Models.ColumnInfo>();
+        var filteredColumns = new List<ColumnInfo>();
         
         foreach (var column in columns)
         {
@@ -987,7 +987,7 @@ public static class SqliteToExcel
     /// </summary>
     private static string BuildSelectSqlWithGrammar(
         string tableName, 
-        List<DB2XL.Core.Models.ColumnInfo> columns, 
+        List<ColumnInfo> columns, 
         OrderInfo orderInfo, 
         SqliteToExcelOptions options)
     {

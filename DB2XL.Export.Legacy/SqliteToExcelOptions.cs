@@ -5,39 +5,12 @@ using DB2XL.Transform.Configuration;
 using DB2XL.Transform.Interfaces;
 using DB2XL.DeltaExport;
 using DB2XL.Query;
+using DB2XL.Core.Enums;
 
 namespace DB2XL;
 
-public enum BlobRenderMode
-{
-    Skip,
-    Hex,
-    Base64
-}
-
-public enum DualExportStrategy
-{
-    /// <summary>
-    /// Export only transformed data (default behavior, backward compatible)
-    /// </summary>
-    TransformedOnly,
-    
-    /// <summary>
-    /// Export only raw/original data (no transformations applied)
-    /// </summary>
-    RawOnly,
-    
-    /// <summary>
-    /// Export both raw and transformed data as separate sheets in the same workbook
-    /// </summary>
-    DualSheets,
-    
-    /// <summary>
-    /// Export both raw and transformed data as separate workbooks
-    /// Raw data goes to specified path, transformed data gets "_Transformed" suffix
-    /// </summary>
-    DualWorkbooks
-}
+// BlobRenderMode moved to DB2XL.Core.Enums to avoid duplication
+// DualExportStrategy moved to DB2XL.Core.Enums to avoid duplication
 
 public sealed class SqliteToExcelOptions
 {

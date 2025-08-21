@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ComparisonOperator = DB2XL.Core.Models.ComparisonOperator;
 
 namespace DB2XL.Query;
 
@@ -32,7 +33,6 @@ public sealed record ComparisonExpression : IWhereExpression
             ComparisonOperator.GreaterThan => HandleSimple(quotedColumn, ">", paramName, parameters),
             ComparisonOperator.GreaterThanOrEqual => HandleSimple(quotedColumn, ">=", paramName, parameters),
             ComparisonOperator.Like => HandleSimple(quotedColumn, "LIKE", paramName, parameters),
-            ComparisonOperator.Glob => HandleSimple(quotedColumn, "GLOB", paramName, parameters),
             ComparisonOperator.In => HandleIn(quotedColumn, paramName, parameters, false),
             ComparisonOperator.NotIn => HandleIn(quotedColumn, paramName, parameters, true),
             ComparisonOperator.Between => HandleBetween(quotedColumn, paramName, parameters),

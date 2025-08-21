@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using System.Diagnostics;
 using Xunit;
 using Xunit.Abstractions;
+using DB2XL.Core.Models;
 
 namespace DB2XL.Query.Tests
 {

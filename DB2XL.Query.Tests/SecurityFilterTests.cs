@@ -1,5 +1,6 @@
 using Xunit;
 using DB2XL.Query;
+using DB2XL.Core.Models;
 
 namespace DB2XL.Query.Tests;
 

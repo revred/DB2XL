@@ -236,9 +236,9 @@ public static class AnalyzeCommand
                 Name = column.Name,
                 DataType = column.Type,
                 NotNull = column.NotNull,
-                DefaultValue = column.DefaultValue,
-                IsPrimaryKey = column.PrimaryKey > 0,
-                PrimaryKeyOrder = column.PrimaryKey
+                DefaultValue = column.DefaultValue?.ToString(),
+                IsPrimaryKey = column.IsPrimaryKey,
+                PrimaryKeyOrder = column.IsPrimaryKey ? 1 : 0
             };
 
             // Analyze column characteristics
@@ -657,7 +657,7 @@ public static class AnalyzeCommand
                 reader.GetString(2), // type
                 reader.GetBoolean(3), // notnull
                 reader.IsDBNull(4) ? null : reader.GetString(4), // dflt_value
-                reader.GetInt32(5) // pk
+                reader.GetInt32(5) > 0 // pk (convert int to bool)
             ));
         }
 
@@ -665,8 +665,7 @@ public static class AnalyzeCommand
     }
 }
 
-// Simple data structures for console tool  
-public record ColumnInfo(string Name, string Type, bool NotNull, string? DefaultValue, int PrimaryKey);
+// ColumnInfo moved to DB2XL.Core.Models to avoid duplication
 
 // Analysis data structures
 public class DatabaseAnalysis

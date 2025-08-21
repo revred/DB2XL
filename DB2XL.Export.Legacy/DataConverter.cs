@@ -5,6 +5,7 @@ using System.Globalization;
 using DB2XL.Transform.Interfaces;
 using DB2XL.Transform.Configuration;
 using DB2XL.Transform.TypeDetection;
+using DB2XL.Core.Enums;
 
 namespace DB2XL;
 
