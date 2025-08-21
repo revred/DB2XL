@@ -9,6 +9,7 @@
     <ProjectReference Include="..\DB2XL.Export.Excel\DB2XL.Export.Excel.csproj" />
     <ProjectReference Include="..\DB2XL.Export.JsonLines\DB2XL.Export.JsonLines.csproj" />
     <ProjectReference Include="..\DB2XL.Delta\DB2XL.Delta.csproj" />
+    <!-- <ProjectReference Include="..\DB2XL.Export.Bundle\DB2XL.Export.Bundle.csproj" /> -->
   </ItemGroup>
 
   <ItemGroup>

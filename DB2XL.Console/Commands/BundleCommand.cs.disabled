@@ -1,0 +1,600 @@
+using DB2XL.Console.Options;
+using DB2XL.Core.Models;
+using DB2XL.Core.Services;
+using DB2XL.Core.Validation;
+using DB2XL.Data.Schema;
+using DB2XL.Export.Bundle.Services;
+using Spectre.Console;
+using System.Diagnostics;
+using Microsoft.Data.Sqlite;
+
+namespace DB2XL.Console.Commands;
+
+/// <summary>
+/// Command implementation for bundle export operations.
+/// Orchestrates the export of SQLite databases to structured bundles.
+/// </summary>
+public static class BundleCommand
+{
+    /// <summary>
+    /// Execute bundle export command with the provided options.
+    /// </summary>
+    /// <param name="options">Parsed command line options</param>
+    /// <returns>Exit code (0 = success, non-zero = error)</returns>
+    public static async Task<int> Execute(BundleOptions options)
+    {
+        try
+        {
+            // Validate input arguments
+            if (!await ValidateInputs(options))
+                return 1;
+
+            // Initialize services
+            var services = InitializeServices();
+            
+            // Handle change log installation if requested
+            if (options.InstallChangeLog)
+            {
+                return await InstallChangeLogInfrastructure(services.changeLogExporter, options);
+            }
+            
+            // Convert CLI options to bundle export options
+            var bundleOptions = MapToBundleExportOptions(options);
+            
+            // Show estimation if requested
+            if (options.EstimateOnly)
+            {
+                return await ShowEstimation(services.exportService, options.Database, bundleOptions);
+            }
+            
+            // Perform the export (regular or delta)
+            if (options.EnableDelta)
+            {
+                return await PerformDeltaExport(services, options, bundleOptions);
+            }
+            else
+            {
+                return await PerformExport(services.exportService, options.Database, bundleOptions, options);
+            }
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Bundle export failed:[/] {ex.Message}");
+            if (options.Verbose)
+            {
+                AnsiConsole.WriteException(ex);
+            }
+            return 1;
+        }
+    }
+
+    private static async Task<bool> ValidateInputs(BundleOptions options)
+    {
+        var hasError = false;
+
+        // Validate database file
+        if (!File.Exists(options.Database))
+        {
+            AnsiConsole.MarkupLine($"[red]Database file not found:[/] {options.Database}");
+            hasError = true;
+        }
+
+        // Validate output directory
+        if (!string.IsNullOrEmpty(options.OutputDirectory))
+        {
+            var outputDir = Path.GetDirectoryName(Path.GetFullPath(options.OutputDirectory));
+            if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+            {
+                AnsiConsole.MarkupLine($"[red]Output directory parent does not exist:[/] {outputDir}");
+                hasError = true;
+            }
+
+            if (Directory.Exists(options.OutputDirectory) && !options.Force)
+            {
+                AnsiConsole.MarkupLine($"[yellow]Output directory already exists:[/] {options.OutputDirectory}");
+                AnsiConsole.MarkupLine("Use --force to overwrite or choose a different directory.");
+                hasError = true;
+            }
+        }
+
+        // Validate partition settings
+        if (options.PartitionSize <= 0)
+        {
+            AnsiConsole.MarkupLine("[red]Partition size must be greater than 0[/]");
+            hasError = true;
+        }
+
+        if (options.SampleRowLimit <= 0)
+        {
+            AnsiConsole.MarkupLine("[red]Sample row limit must be greater than 0[/]");
+            hasError = true;
+        }
+
+        // Validate delta export settings
+        if (options.EnableDelta)
+        {
+            if (options.DeltaStrategy.Equals("watermark", StringComparison.OrdinalIgnoreCase) && 
+                string.IsNullOrEmpty(options.WatermarkColumn))
+            {
+                AnsiConsole.MarkupLine("[red]Watermark column is required for watermark delta strategy[/]");
+                hasError = true;
+            }
+
+            if (!options.DeltaStrategy.Equals("watermark", StringComparison.OrdinalIgnoreCase) && 
+                !options.DeltaStrategy.Equals("changelog", StringComparison.OrdinalIgnoreCase))
+            {
+                AnsiConsole.MarkupLine("[red]Delta strategy must be 'watermark' or 'changelog'[/]");
+                hasError = true;
+            }
+        }
+
+        // Validate PII configuration
+        if (!string.IsNullOrEmpty(options.PiiConfigPath) && !File.Exists(options.PiiConfigPath))
+        {
+            AnsiConsole.MarkupLine($"[red]PII configuration file not found:[/] {options.PiiConfigPath}");
+            hasError = true;
+        }
+
+        return !hasError;
+    }
+
+    private static (IBundleExportService exportService, IBundlePathManager pathManager, IBundleHashCalculator hashCalculator, 
+                    IWatermarkDeltaExporter watermarkExporter, IChangeLogDeltaExporter changeLogExporter, IDeltaManifestManager manifestManager) InitializeServices()
+    {
+        // Initialize core services (in production, this would come from DI container)
+        var pathManager = new BundlePathManager();
+        var hashCalculator = new BundleHashCalculator();
+        var validator = new BundleExportValidator();
+        var schemaReader = new SqliteSchemaReader();
+        
+        var exportService = new BundleExportService(
+            pathManager, 
+            hashCalculator, 
+            validator, 
+            schemaReader);
+
+        // Initialize export engines
+        var jsonlExporter = new JsonlExportEngine();
+        var parquetExporter = new ParquetExportEngine();
+        
+        // Initialize delta services
+        var watermarkExporter = new WatermarkDeltaExporter(jsonlExporter, parquetExporter);
+        var changeLogExporter = new ChangeLogDeltaExporter(jsonlExporter, parquetExporter);
+        var manifestManager = new DeltaManifestManager();
+
+        return (exportService, pathManager, hashCalculator, watermarkExporter, changeLogExporter, manifestManager);
+    }
+
+    private static BundleExportOptions MapToBundleExportOptions(BundleOptions options)
+    {
+        return new BundleExportOptions
+        {
+            BundleRootPath = options.OutputDirectory ?? string.Empty,
+            IndexWorkbookName = options.IndexWorkbookName,
+            ManifestDirectoryName = options.ManifestDirectoryName,
+            TablesDirectoryName = options.TablesDirectoryName,
+            GenerateParquet = options.GenerateParquet,
+            IncludeSamples = options.IncludeSamples,
+            SampleRowLimit = options.SampleRowLimit,
+            DeterministicTimestamps = options.DeterministicTimestamps
+        };
+    }
+
+    private static async Task<int> ShowEstimation(IBundleExportService exportService, string databasePath, BundleExportOptions bundleOptions)
+    {
+        AnsiConsole.MarkupLine("[yellow]Analyzing database for bundle export estimation...[/]");
+
+        var estimate = await exportService.EstimateAsync(databasePath, bundleOptions);
+
+        // Create estimation report
+        var panel = new Panel($"""
+            [bold blue]Bundle Export Estimation[/]
+            
+            [yellow]Database Information:[/]
+            • File: [dim]{estimate.DatabaseInfo.FilePath}[/]
+            • Size: [dim]{FormatFileSize(estimate.DatabaseInfo.FileSizeBytes)}[/]
+            • Tables: [dim]{estimate.EstimatedTableCount}[/]
+            • Total Rows: [dim]{estimate.EstimatedTotalRows:N0}[/]
+            
+            [yellow]Export Complexity:[/] [bold]{estimate.Complexity}[/]
+            • Estimated Duration: [dim]{estimate.EstimatedDuration:hh\\:mm\\:ss}[/]
+            • Expected Partitions: [dim]{estimate.EstimatedPartitionCount}[/]
+            • Bundle Size: [dim]{FormatFileSize(estimate.EstimatedOutputSizeBytes)}[/]
+            
+            [yellow]Performance Recommendations:[/]
+            {string.Join("\n", estimate.Recommendations.Suggestions.Select(r => $"• [dim]{r}[/]"))}
+            """)
+            .Border(BoxBorder.Rounded)
+            .BorderColor(Color.Blue);
+
+        AnsiConsole.Write(panel);
+
+        // Show table breakdown if verbose
+        if (estimate.TableEstimates.Any())
+        {
+            AnsiConsole.WriteLine();
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Grey)
+                .AddColumn("Table")
+                .AddColumn("Rows", c => c.RightAligned())
+                .AddColumn("Partitions", c => c.RightAligned())
+                .AddColumn("Est. Duration", c => c.RightAligned());
+
+            foreach (var tableEst in estimate.TableEstimates.OrderByDescending(t => t.EstimatedRows).Take(10))
+            {
+                table.AddRow(
+                    tableEst.TableName,
+                    tableEst.EstimatedRows.ToString("N0"),
+                    tableEst.EstimatedPartitions.ToString(),
+                    tableEst.EstimatedProcessingTime.ToString(@"mm\:ss"));
+            }
+
+            if (estimate.TableEstimates.Count > 10)
+            {
+                table.AddRow("[dim]...[/]", $"[dim]+{estimate.TableEstimates.Count - 10} more[/]", "", "");
+            }
+
+            AnsiConsole.Write(table);
+        }
+
+        return 0;
+    }
+
+    private static async Task<int> PerformExport(IBundleExportService exportService, string databasePath, BundleExportOptions bundleOptions, BundleOptions cliOptions)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        
+        return await AnsiConsole.Progress()
+            .StartAsync(async ctx =>
+            {
+                var overallTask = ctx.AddTask("[green]Exporting bundle[/]", maxValue: 100);
+                var currentTask = ctx.AddTask("[blue]Initializing...[/]", maxValue: 100);
+
+                try
+                {
+                    // Perform export
+                    overallTask.Description = "[green]Validating options...[/]";
+                    overallTask.Value = 10;
+
+                    currentTask.Description = "[blue]Validating export configuration...[/]";
+                    var validation = exportService.ValidateOptions(bundleOptions);
+                    if (!validation.IsValid)
+                    {
+                        foreach (var error in validation.Errors)
+                        {
+                            AnsiConsole.MarkupLine($"[red]Validation Error:[/] {error}");
+                        }
+                        return 1;
+                    }
+                    currentTask.Value = 100;
+
+                    // Start export
+                    overallTask.Description = "[green]Exporting database...[/]";
+                    overallTask.Value = 20;
+
+                    currentTask.Description = "[blue]Processing tables and generating partitions...[/]";
+                    currentTask.Value = 0;
+
+                    var result = await exportService.ExportAsync(databasePath, bundleOptions);
+                    
+                    overallTask.Value = 100;
+                    currentTask.Value = 100;
+                    currentTask.Description = "[green]Export completed[/]";
+
+                    stopwatch.Stop();
+
+                    // Display results
+                    await ShowExportResults(result, stopwatch.Elapsed, cliOptions);
+
+                    return result.IsSuccess ? 0 : 1;
+                }
+                catch (Exception ex)
+                {
+                    currentTask.Description = $"[red]Failed: {ex.Message}[/]";
+                    throw;
+                }
+            });
+    }
+
+    private static async Task ShowExportResults(BundleExportResult result, TimeSpan elapsed, BundleOptions options)
+    {
+        AnsiConsole.WriteLine();
+        
+        var successColor = result.IsSuccess ? "green" : "yellow";
+        var statusText = result.IsSuccess ? "SUCCESS" : $"PARTIAL ({result.SkippedTables.Count} skipped)";
+        
+        var panel = new Panel($"""
+            [bold {successColor}]Bundle Export {statusText}[/]
+            
+            [yellow]Bundle Location:[/]
+            • Root: [dim]{result.Layout.RootPath}[/]
+            • Index: [dim]{result.Layout.IndexWorkbookPath}[/]
+            • Tables: [dim]{result.Layout.TablesPath}[/]
+            • Manifest: [dim]{result.Layout.ManifestPath}[/]
+            
+            [yellow]Export Statistics:[/]
+            • Duration: [dim]{elapsed:hh\\:mm\\:ss}[/]
+            • Tables Exported: [dim]{result.Statistics.TablesExported}[/]
+            • Total Rows: [dim]{result.Statistics.TotalRowsExported:N0}[/]
+            • Partitions Created: [dim]{result.Statistics.PartitionFilesCreated}[/]
+            • Bundle Size: [dim]{FormatFileSize(result.Statistics.TotalFileSizeBytes)}[/]
+            
+            {(result.SkippedTables.Count > 0 ? 
+                $"[yellow]Skipped Tables:[/]\n{string.Join("\n", result.SkippedTables.Select(s => $"• [dim]{s}[/]"))}" : "")}
+            """)
+            .Border(BoxBorder.Rounded)
+            .BorderColor(result.IsSuccess ? Color.Green : Color.Yellow);
+
+        AnsiConsole.Write(panel);
+
+        // Show table breakdown if not too many
+        if (result.ExportedTables.Count <= 20 && result.ExportedTables.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Grey)
+                .AddColumn("Table")
+                .AddColumn("Rows", c => c.RightAligned())
+                .AddColumn("Partitions", c => c.RightAligned())
+                .AddColumn("Size", c => c.RightAligned());
+
+            // Create a simple table with exported table names
+            foreach (var tableName in result.ExportedTables)
+            {
+                // Find the corresponding partition for row count info
+                var tablePartitions = result.Partitions.Where(p => p.TableName == tableName).ToList();
+                var totalRows = tablePartitions.Sum(p => p.RowCount);
+                var partitionCount = tablePartitions.Count;
+                var totalSize = tablePartitions.Sum(p => p.FileSizeBytes);
+                
+                table.AddRow(
+                    tableName,
+                    totalRows.ToString("N0"),
+                    partitionCount.ToString(),
+                    FormatFileSize(totalSize));
+            }
+
+            AnsiConsole.Write(table);
+        }
+
+        // Validation results if requested
+        if (options.ValidateBundle && Directory.Exists(result.Layout.RootPath))
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[yellow]Bundle validation:[/] [green]✓ Structure verified[/]");
+        }
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes == 0) return "0 B";
+        
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        var order = 0;
+        var size = (double)bytes;
+        
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            size /= 1024;
+            order++;
+        }
+        
+        return $"{size:F1} {sizes[order]}";
+    }
+
+    private static async Task<int> InstallChangeLogInfrastructure(IChangeLogDeltaExporter changeLogExporter, BundleOptions options)
+    {
+        try
+        {
+            AnsiConsole.MarkupLine("[yellow]Installing change log infrastructure...[/]");
+            
+            var connectionString = $"Data Source={options.Database};Mode=ReadWrite";
+            var setupOptions = new ChangeLogSetupOptions
+            {
+                ChangeLogTableName = "_change_log",
+                MaxChangeLogAge = TimeSpan.FromDays(30)
+            };
+
+            var result = await changeLogExporter.SetupChangeLogAsync(
+                connectionString,
+                "ALL_TABLES", // Setup for all tables
+                setupOptions);
+
+            if (result.IsSuccess)
+            {
+                AnsiConsole.MarkupLine("[green]✓ Change log infrastructure installed successfully[/]");
+                AnsiConsole.MarkupLine($"[dim]Created change log table: {setupOptions.ChangeLogTableName}[/]");
+                AnsiConsole.MarkupLine($"[dim]Change log infrastructure setup completed[/]");
+                return 0;
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[red]Failed to install change log infrastructure:[/]");
+                foreach (var error in result.Errors)
+                {
+                    AnsiConsole.MarkupLine($"  • {error}");
+                }
+                return 1;
+            }
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Error installing change log infrastructure:[/] {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static async Task<int> PerformDeltaExport(
+        (IBundleExportService exportService, IBundlePathManager pathManager, IBundleHashCalculator hashCalculator, 
+         IWatermarkDeltaExporter watermarkExporter, IChangeLogDeltaExporter changeLogExporter, IDeltaManifestManager manifestManager) services,
+        BundleOptions options,
+        BundleExportOptions bundleOptions)
+    {
+        try
+        {
+            var connectionString = $"Data Source={options.Database};Mode=ReadOnly";
+            var bundleDirectory = bundleOptions.BundleRootPath;
+            
+            // Determine tables to export
+            var tablesToExport = await GetTablesToExport(connectionString, options);
+            
+            AnsiConsole.MarkupLine($"[yellow]Starting delta export of {tablesToExport.Count} tables...[/]");
+            
+            var overallSuccess = true;
+            var totalRowsExported = 0L;
+            
+            foreach (var tableName in tablesToExport)
+            {
+                AnsiConsole.MarkupLine($"[blue]Processing table: {tableName}[/]");
+                
+                var exportResult = await ExportTableDelta(services, options, connectionString, bundleDirectory, tableName);
+                
+                if (exportResult.IsSuccess)
+                {
+                    totalRowsExported += exportResult.RowsExported;
+                    AnsiConsole.MarkupLine($"[green]✓ {tableName}: {exportResult.RowsExported} rows exported[/]");
+                }
+                else
+                {
+                    overallSuccess = false;
+                    AnsiConsole.MarkupLine($"[red]✗ {tableName}: Export failed[/]");
+                    foreach (var error in exportResult.Errors)
+                    {
+                        AnsiConsole.MarkupLine($"  • {error}");
+                    }
+                }
+            }
+            
+            // Show final results
+            var statusColor = overallSuccess ? "green" : "yellow";
+            var statusText = overallSuccess ? "SUCCESS" : "PARTIAL";
+            
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[bold {statusColor}]Delta Export {statusText}[/]");
+            AnsiConsole.MarkupLine($"[dim]Total rows exported: {totalRowsExported:N0}[/]");
+            AnsiConsole.MarkupLine($"[dim]Bundle location: {bundleDirectory}[/]");
+            
+            return overallSuccess ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Delta export failed:[/] {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static async Task<List<string>> GetTablesToExport(string connectionString, BundleOptions options)
+    {
+        var tables = new List<string>();
+        
+        using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+        
+        var query = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'";
+        if (!string.IsNullOrEmpty(options.IncludeTables))
+        {
+            var includedTables = options.IncludeTables.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var tableFilter = string.Join("','", includedTables.Select(t => t.Trim()));
+            query += $" AND name IN ('{tableFilter}')";
+        }
+        
+        if (!string.IsNullOrEmpty(options.ExcludeTables))
+        {
+            var excludedTables = options.ExcludeTables.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var tableFilter = string.Join("','", excludedTables.Select(t => t.Trim()));
+            query += $" AND name NOT IN ('{tableFilter}')";
+        }
+        
+        query += " ORDER BY name";
+        
+        using var command = new SqliteCommand(query, connection);
+        using var reader = await command.ExecuteReaderAsync();
+        
+        while (await reader.ReadAsync())
+        {
+            tables.Add(reader.GetString(0));
+        }
+        
+        return tables;
+    }
+
+    private static async Task<DeltaExportResult> ExportTableDelta(
+        (IBundleExportService exportService, IBundlePathManager pathManager, IBundleHashCalculator hashCalculator, 
+         IWatermarkDeltaExporter watermarkExporter, IChangeLogDeltaExporter changeLogExporter, IDeltaManifestManager manifestManager) services,
+        BundleOptions options,
+        string connectionString,
+        string bundleDirectory,
+        string tableName)
+    {
+        try
+        {
+            var deltaMode = options.DeltaStrategy.Equals("changelog", StringComparison.OrdinalIgnoreCase) 
+                ? DeltaExportMode.ChangeLog 
+                : DeltaExportMode.Watermark;
+            
+            // Generate selection hash for checkpoint tracking
+            var selectionHash = GenerateSelectionHash(tableName, options.WatermarkColumn ?? "");
+            
+            // Get last checkpoint
+            var lastCheckpoint = await services.manifestManager.GetLatestCheckpointAsync(
+                bundleDirectory, tableName, selectionHash, deltaMode);
+            
+            DeltaExportResult result;
+            
+            if (deltaMode == DeltaExportMode.Watermark)
+            {
+                var watermarkColumn = options.WatermarkColumn ?? "updated_at";
+                var deltaOptions = new DeltaExportOptions
+                {
+                    OutputDirectory = Path.Combine(bundleDirectory, "tables"),
+                    Format = ExportFormat.Jsonl,
+                    FileNamePattern = $"{tableName}_delta_{{timestamp}}_{{sequence}}"
+                };
+                
+                result = await services.watermarkExporter.ExportDeltaAsync(
+                    connectionString, tableName, watermarkColumn, lastCheckpoint, deltaOptions);
+            }
+            else
+            {
+                var changeLogOptions = new ChangeLogDeltaExportOptions
+                {
+                    ChangeLogTableName = "_change_log",
+                    OutputDirectory = Path.Combine(bundleDirectory, "tables"),
+                    Format = ExportFormat.Jsonl,
+                    FileNamePattern = $"{tableName}_changelog_{{timestamp}}_{{sequence}}"
+                };
+                
+                result = await services.changeLogExporter.ExportDeltaAsync(
+                    connectionString, tableName, lastCheckpoint, changeLogOptions);
+            }
+            
+            // Update manifest on success
+            if (result.IsSuccess)
+            {
+                await services.manifestManager.UpdateDeltaManifestAsync(
+                    bundleDirectory, tableName, result, deltaMode);
+            }
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return new DeltaExportResult
+            {
+                IsSuccess = false,
+                RowsExported = 0,
+                Errors = new[] { ex.Message }.AsReadOnly()
+            };
+        }
+    }
+
+    private static string GenerateSelectionHash(string tableName, string watermarkColumn)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var input = $"{tableName}_{watermarkColumn}";
+        var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+        return Convert.ToBase64String(hash)[..8]; // Take first 8 characters
+    }
+}

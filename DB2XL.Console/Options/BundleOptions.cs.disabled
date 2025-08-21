@@ -1,0 +1,119 @@
+using CommandLine;
+
+namespace DB2XL.Console.Options;
+
+[Verb("bundle", HelpText = "Export SQLite database to structured bundle with JSONL partitions, Excel index, and AI-ready manifests.")]
+public class BundleOptions : GlobalOptions
+{
+    [Value(0, Required = true, HelpText = "Path to SQLite database file.", MetaName = "database")]
+    public string Database { get; set; } = string.Empty;
+
+    [Value(1, Required = false, HelpText = "Bundle root directory (default: auto-generated with timestamp).", MetaName = "output-dir")]
+    public string? OutputDirectory { get; set; }
+
+    // Bundle structure options
+    [Option("index-name", Required = false, HelpText = "Name of Excel index workbook.", Default = "index.xlsx")]
+    public string IndexWorkbookName { get; set; } = "index.xlsx";
+
+    [Option("manifest-dir", Required = false, HelpText = "Manifest directory name.", Default = "manifest")]
+    public string ManifestDirectoryName { get; set; } = "manifest";
+
+    [Option("tables-dir", Required = false, HelpText = "Tables directory name.", Default = "tables")]
+    public string TablesDirectoryName { get; set; } = "tables";
+
+    // Format options
+    [Option("parquet", Required = false, HelpText = "Generate Parquet files alongside JSONL.")]
+    public bool GenerateParquet { get; set; }
+
+    [Option("samples", Required = false, HelpText = "Include sample data files for each table.")]
+    public bool IncludeSamples { get; set; }
+
+    [Option("sample-rows", Required = false, HelpText = "Maximum rows in sample files.", Default = 10_000)]
+    public int SampleRowLimit { get; set; } = 10_000;
+
+    // Test and validation options
+    [Option("deterministic", Required = false, HelpText = "Use deterministic timestamps for testing.")]
+    public bool DeterministicTimestamps { get; set; }
+
+    [Option("estimate", Required = false, HelpText = "Show export complexity estimate and exit.")]
+    public bool EstimateOnly { get; set; }
+
+    [Option("validate", Required = false, HelpText = "Validate bundle structure after export.")]
+    public bool ValidateBundle { get; set; } = true;
+
+    // Performance options
+    [Option("batch-size", Required = false, HelpText = "Rows per processing batch for large tables.", Default = 100_000)]
+    public int BatchSize { get; set; } = 100_000;
+
+    [Option("parallel", Required = false, HelpText = "Enable parallel table processing.")]
+    public bool ParallelProcessing { get; set; }
+
+    [Option("max-memory", Required = false, HelpText = "Maximum memory usage in MB (0=auto).")]
+    public int MaxMemoryMB { get; set; } = 0;
+
+    // Data filtering
+    [Option("tables", Required = false, HelpText = "Comma-separated list of tables to include.")]
+    public string? IncludeTables { get; set; }
+
+    [Option("exclude-tables", Required = false, HelpText = "Comma-separated list of tables to exclude.")]
+    public string? ExcludeTables { get; set; }
+
+    [Option("include-views", Required = false, HelpText = "Include database views in bundle.")]
+    public bool IncludeViews { get; set; }
+
+    [Option("where", Required = false, HelpText = "Global WHERE clause for row filtering.")]
+    public string? GlobalWhereClause { get; set; }
+
+    // Partitioning options
+    [Option("partition-size", Required = false, HelpText = "Maximum rows per partition file.", Default = 200_000)]
+    public int PartitionSize { get; set; } = 200_000;
+
+    [Option("partition-strategy", Required = false, HelpText = "Partitioning strategy: none, size, time, filter.")]
+    public string PartitionStrategy { get; set; } = "size";
+
+    [Option("time-column", Required = false, HelpText = "Column name for time-based partitioning.")]
+    public string? TimePartitionColumn { get; set; }
+
+    [Option("time-granularity", Required = false, HelpText = "Time partition granularity: day, week, month, quarter, year.")]
+    public string TimeGranularity { get; set; } = "month";
+
+    // Delta export options
+    [Option("delta", Required = false, HelpText = "Enable delta/incremental export mode.")]
+    public bool EnableDelta { get; set; }
+
+    [Option("delta-strategy", Required = false, HelpText = "Delta export strategy: watermark, changelog.")]
+    public string DeltaStrategy { get; set; } = "watermark";
+
+    [Option("watermark-column", Required = false, HelpText = "Column name for watermark-based delta exports.")]
+    public string? WatermarkColumn { get; set; }
+
+    [Option("checkpoint-file", Required = false, HelpText = "Path to checkpoint file for delta exports.")]
+    public string? CheckpointFile { get; set; }
+
+    [Option("install-changelog", Required = false, HelpText = "Install change log triggers for future delta exports.")]
+    public bool InstallChangeLog { get; set; }
+
+    // PII and data governance options
+    [Option("pii-config", Required = false, HelpText = "Path to PII redaction configuration (YAML/JSON).")]
+    public string? PiiConfigPath { get; set; }
+
+    [Option("redact-pii", Required = false, HelpText = "Enable automatic PII detection and redaction.")]
+    public bool RedactPii { get; set; }
+
+    // Advanced partitioning
+    [Option("partition", Required = false, HelpText = "Partition configuration: table:by=strategy,field=column,size=N.")]
+    public string? PartitionConfig { get; set; }
+
+    // Output control
+    [Option("dry-run", Required = false, HelpText = "Show planned operations without executing.")]
+    public bool DryRun { get; set; }
+
+    [Option("force", Required = false, HelpText = "Overwrite existing bundle directory.")]
+    public bool Force { get; set; }
+
+    [Option("compress", Required = false, HelpText = "Compress bundle into ZIP archive after export.")]
+    public bool CompressBundle { get; set; }
+
+    [Option("manifest", Required = false, HelpText = "Generate comprehensive export manifest.", Default = true)]
+    public bool GenerateManifest { get; set; } = true;
+}

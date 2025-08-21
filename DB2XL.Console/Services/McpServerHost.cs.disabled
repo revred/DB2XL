@@ -1,0 +1,408 @@
+using DB2XL.Core.Services;
+using DB2XL.Export.Bundle.Services;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace DB2XL.Console.Services;
+
+/// <summary>
+/// MCP (Model Context Protocol) server host for AI integration.
+/// Provides structured JSON-RPC interface for AI assistants to interact with DB2XL.
+/// </summary>
+public sealed class McpServerHost
+{
+    private readonly IMcpExportService _mcpService;
+    private readonly JsonSerializerOptions _jsonOptions;
+
+    public McpServerHost()
+    {
+        // Initialize MCP service with dependencies
+        var bundleService = CreateBundleService();
+        var (watermarkExporter, changeLogExporter, manifestManager) = CreateDeltaServices();
+        
+        _mcpService = new McpExportService(
+            bundleService,
+            watermarkExporter,
+            changeLogExporter,
+            manifestManager);
+
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+    }
+
+    /// <summary>
+    /// Process MCP request and return JSON-RPC response.
+    /// </summary>
+    /// <param name="jsonRequest">JSON-RPC request from AI assistant</param>
+    /// <returns>JSON-RPC response</returns>
+    public async Task<string> ProcessRequestAsync(string jsonRequest)
+    {
+        try
+        {
+            var request = JsonNode.Parse(jsonRequest);
+            if (request == null)
+            {
+                return CreateErrorResponse(null, -32700, "Parse error");
+            }
+
+            var method = request["method"]?.ToString();
+            var parameters = request["params"]?.AsObject();
+            var id = request["id"];
+
+            if (string.IsNullOrEmpty(method))
+            {
+                return CreateErrorResponse(id, -32600, "Invalid Request");
+            }
+
+            var result = await ProcessMethodAsync(method, parameters);
+            return CreateSuccessResponse(id, result);
+        }
+        catch (Exception ex)
+        {
+            return CreateErrorResponse(null, -32603, $"Internal error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Get MCP server capabilities and tool definitions.
+    /// </summary>
+    /// <returns>Server capabilities manifest</returns>
+    public string GetCapabilities()
+    {
+        var capabilities = new
+        {
+            protocolVersion = "2024-11-05",
+            capabilities = new
+            {
+                tools = new { },
+                resources = new { },
+                prompts = new { }
+            },
+            serverInfo = new
+            {
+                name = "DB2XL MCP Server",
+                version = "1.0.0",
+                description = "SQLite database export and analysis tools for AI assistants"
+            },
+            tools = new[]
+            {
+                new
+                {
+                    name = "preview_database",
+                    description = "Preview database structure and sample data for AI analysis",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            database_path = new { type = "string", description = "Path to SQLite database file" },
+                            include_tables = new { type = "array", items = new { type = "string" }, description = "Specific tables to include (optional)" },
+                            max_preview_rows = new { type = "number", description = "Maximum sample rows per table", @default = 5 },
+                            include_statistics = new { type = "boolean", description = "Include database statistics", @default = true },
+                            include_sample_data = new { type = "boolean", description = "Include sample data", @default = true },
+                            include_relationships = new { type = "boolean", description = "Include table relationships", @default = true }
+                        },
+                        required = new[] { "database_path" }
+                    }
+                },
+                new
+                {
+                    name = "export_database",
+                    description = "Export database to various formats with AI-optimized output",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            database_path = new { type = "string", description = "Path to SQLite database file" },
+                            output_directory = new { type = "string", description = "Output directory for exported files" },
+                            format = new { type = "string", description = "Export format", @default = "bundle", @enum = new[] { "bundle", "jsonl", "parquet", "excel" } },
+                            include_tables = new { type = "array", items = new { type = "string" }, description = "Specific tables to include (optional)" },
+                            include_samples = new { type = "boolean", description = "Include sample files", @default = true },
+                            sample_row_limit = new { type = "number", description = "Maximum rows in sample files", @default = 1000 },
+                            generate_manifest = new { type = "boolean", description = "Generate AI-friendly manifest", @default = true },
+                            pii_config = new { type = "object", description = "PII redaction configuration (optional)" }
+                        },
+                        required = new[] { "database_path", "output_directory" }
+                    }
+                },
+                new
+                {
+                    name = "export_delta",
+                    description = "Perform incremental/delta export with checkpoint management",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            database_path = new { type = "string", description = "Path to SQLite database file" },
+                            output_directory = new { type = "string", description = "Output directory for delta files" },
+                            strategy = new { type = "string", description = "Delta strategy", @default = "watermark", @enum = new[] { "watermark", "changelog" } },
+                            watermark_column = new { type = "string", description = "Column for watermark-based tracking (required for watermark strategy)" },
+                            include_tables = new { type = "array", items = new { type = "string" }, description = "Specific tables to include (optional)" },
+                            checkpoint_file = new { type = "string", description = "Previous checkpoint file path (optional)" },
+                            install_change_tracking = new { type = "boolean", description = "Install change tracking infrastructure", @default = false }
+                        },
+                        required = new[] { "database_path", "output_directory" }
+                    }
+                },
+                new
+                {
+                    name = "get_schema",
+                    description = "Get detailed database schema information",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            database_path = new { type = "string", description = "Path to SQLite database file" },
+                            include_column_details = new { type = "boolean", description = "Include detailed column information", @default = true },
+                            include_indexes = new { type = "boolean", description = "Include index information", @default = true },
+                            include_foreign_keys = new { type = "boolean", description = "Include foreign key relationships", @default = true },
+                            include_create_sql = new { type = "boolean", description = "Include CREATE SQL statements", @default = false }
+                        },
+                        required = new[] { "database_path" }
+                    }
+                },
+                new
+                {
+                    name = "execute_query",
+                    description = "Execute SQL query with safety constraints for AI interaction",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            database_path = new { type = "string", description = "Path to SQLite database file" },
+                            sql_query = new { type = "string", description = "SQL query to execute" },
+                            max_rows = new { type = "number", description = "Maximum rows to return", @default = 1000 },
+                            timeout_seconds = new { type = "number", description = "Query timeout in seconds", @default = 30 },
+                            allow_writes = new { type = "boolean", description = "Allow write operations", @default = false }
+                        },
+                        required = new[] { "database_path", "sql_query" }
+                    }
+                }
+            }
+        };
+
+        return JsonSerializer.Serialize(capabilities, _jsonOptions);
+    }
+
+    private async Task<object> ProcessMethodAsync(string method, JsonObject? parameters)
+    {
+        return method switch
+        {
+            "tools/list" => await ListToolsAsync(),
+            "tools/call" => await CallToolAsync(parameters),
+            "initialize" => new { protocolVersion = "2024-11-05", capabilities = new { tools = new { } } },
+            _ => throw new ArgumentException($"Unknown method: {method}")
+        };
+    }
+
+    private async Task<object> ListToolsAsync()
+    {
+        return new
+        {
+            tools = new[]
+            {
+                new { name = "preview_database", description = "Preview database structure and sample data for AI analysis" },
+                new { name = "export_database", description = "Export database to various formats with AI-optimized output" },
+                new { name = "export_delta", description = "Perform incremental/delta export with checkpoint management" },
+                new { name = "get_schema", description = "Get detailed database schema information" },
+                new { name = "execute_query", description = "Execute SQL query with safety constraints for AI interaction" }
+            }
+        };
+    }
+
+    private async Task<object> CallToolAsync(JsonObject? parameters)
+    {
+        if (parameters == null)
+            throw new ArgumentException("Missing parameters for tool call");
+
+        var toolName = parameters["name"]?.ToString();
+        var arguments = parameters["arguments"]?.AsObject();
+
+        if (string.IsNullOrEmpty(toolName))
+            throw new ArgumentException("Missing tool name");
+
+        return toolName switch
+        {
+            "preview_database" => await CallPreviewDatabaseAsync(arguments),
+            "export_database" => await CallExportDatabaseAsync(arguments),
+            "export_delta" => await CallExportDeltaAsync(arguments),
+            "get_schema" => await CallGetSchemaAsync(arguments),
+            "execute_query" => await CallExecuteQueryAsync(arguments),
+            _ => throw new ArgumentException($"Unknown tool: {toolName}")
+        };
+    }
+
+    private async Task<object> CallPreviewDatabaseAsync(JsonObject? arguments)
+    {
+        if (arguments == null)
+            throw new ArgumentException("Missing arguments for preview_database");
+
+        var request = new McpPreviewRequest
+        {
+            DatabasePath = arguments["database_path"]?.ToString() ?? throw new ArgumentException("Missing database_path"),
+            IncludeTables = ParseStringArray(arguments["include_tables"]),
+            MaxPreviewRows = ParseInt(arguments["max_preview_rows"], 5),
+            IncludeStatistics = ParseBool(arguments["include_statistics"], true),
+            IncludeSampleData = ParseBool(arguments["include_sample_data"], true),
+            IncludeRelationships = ParseBool(arguments["include_relationships"], true)
+        };
+
+        var result = await _mcpService.PreviewDatabaseAsync(request);
+        return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(result, _jsonOptions) } } };
+    }
+
+    private async Task<object> CallExportDatabaseAsync(JsonObject? arguments)
+    {
+        if (arguments == null)
+            throw new ArgumentException("Missing arguments for export_database");
+
+        var request = new McpExportRequest
+        {
+            DatabasePath = arguments["database_path"]?.ToString() ?? throw new ArgumentException("Missing database_path"),
+            OutputDirectory = arguments["output_directory"]?.ToString() ?? throw new ArgumentException("Missing output_directory"),
+            Format = arguments["format"]?.ToString() ?? "bundle",
+            IncludeTables = ParseStringArray(arguments["include_tables"]),
+            IncludeSamples = ParseBool(arguments["include_samples"], true),
+            SampleRowLimit = ParseInt(arguments["sample_row_limit"], 1000),
+            GenerateManifest = ParseBool(arguments["generate_manifest"], true)
+        };
+
+        var result = await _mcpService.ExportDatabaseAsync(request);
+        return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(result, _jsonOptions) } } };
+    }
+
+    private async Task<object> CallExportDeltaAsync(JsonObject? arguments)
+    {
+        if (arguments == null)
+            throw new ArgumentException("Missing arguments for export_delta");
+
+        var request = new McpDeltaRequest
+        {
+            DatabasePath = arguments["database_path"]?.ToString() ?? throw new ArgumentException("Missing database_path"),
+            OutputDirectory = arguments["output_directory"]?.ToString() ?? throw new ArgumentException("Missing output_directory"),
+            Strategy = arguments["strategy"]?.ToString() ?? "watermark",
+            WatermarkColumn = arguments["watermark_column"]?.ToString(),
+            IncludeTables = ParseStringArray(arguments["include_tables"]),
+            CheckpointFile = arguments["checkpoint_file"]?.ToString(),
+            InstallChangeTracking = ParseBool(arguments["install_change_tracking"], false)
+        };
+
+        var result = await _mcpService.ExportDeltaAsync(request);
+        return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(result, _jsonOptions) } } };
+    }
+
+    private async Task<object> CallGetSchemaAsync(JsonObject? arguments)
+    {
+        if (arguments == null)
+            throw new ArgumentException("Missing arguments for get_schema");
+
+        var request = new McpSchemaRequest
+        {
+            DatabasePath = arguments["database_path"]?.ToString() ?? throw new ArgumentException("Missing database_path"),
+            IncludeColumnDetails = ParseBool(arguments["include_column_details"], true),
+            IncludeIndexes = ParseBool(arguments["include_indexes"], true),
+            IncludeForeignKeys = ParseBool(arguments["include_foreign_keys"], true),
+            IncludeCreateSql = ParseBool(arguments["include_create_sql"], false)
+        };
+
+        var result = await _mcpService.GetSchemaAsync(request);
+        return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(result, _jsonOptions) } } };
+    }
+
+    private async Task<object> CallExecuteQueryAsync(JsonObject? arguments)
+    {
+        if (arguments == null)
+            throw new ArgumentException("Missing arguments for execute_query");
+
+        var request = new McpQueryRequest
+        {
+            DatabasePath = arguments["database_path"]?.ToString() ?? throw new ArgumentException("Missing database_path"),
+            SqlQuery = arguments["sql_query"]?.ToString() ?? throw new ArgumentException("Missing sql_query"),
+            MaxRows = ParseInt(arguments["max_rows"], 1000),
+            TimeoutSeconds = ParseInt(arguments["timeout_seconds"], 30),
+            AllowWrites = ParseBool(arguments["allow_writes"], false)
+        };
+
+        var result = await _mcpService.ExecuteQueryAsync(request);
+        return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(result, _jsonOptions) } } };
+    }
+
+    private static IReadOnlyList<string>? ParseStringArray(JsonNode? node)
+    {
+        if (node?.AsArray() is JsonArray array)
+        {
+            return array.Select(item => item?.ToString()).Where(s => s != null).Cast<string>().ToList();
+        }
+        return null;
+    }
+
+    private static int ParseInt(JsonNode? node, int defaultValue)
+    {
+        if (node?.AsValue().TryGetValue<int>(out var value) == true)
+            return value;
+        return defaultValue;
+    }
+
+    private static bool ParseBool(JsonNode? node, bool defaultValue)
+    {
+        if (node?.AsValue().TryGetValue<bool>(out var value) == true)
+            return value;
+        return defaultValue;
+    }
+
+    private string CreateSuccessResponse(JsonNode? id, object result)
+    {
+        var response = new
+        {
+            jsonrpc = "2.0",
+            id = id?.ToString(),
+            result
+        };
+        return JsonSerializer.Serialize(response, _jsonOptions);
+    }
+
+    private string CreateErrorResponse(JsonNode? id, int code, string message)
+    {
+        var response = new
+        {
+            jsonrpc = "2.0",
+            id = id?.ToString(),
+            error = new
+            {
+                code,
+                message
+            }
+        };
+        return JsonSerializer.Serialize(response, _jsonOptions);
+    }
+
+    private static IBundleExportService CreateBundleService()
+    {
+        var pathManager = new BundlePathManager();
+        var hashCalculator = new BundleHashCalculator();
+        var validator = new BundleExportValidator();
+        var schemaReader = new SqliteSchemaReader();
+
+        return new BundleExportService(pathManager, hashCalculator, validator, schemaReader);
+    }
+
+    private static (IWatermarkDeltaExporter, IChangeLogDeltaExporter, IDeltaManifestManager) CreateDeltaServices()
+    {
+        var jsonlExporter = new JsonlExportEngine();
+        var parquetExporter = new ParquetExportEngine();
+
+        var watermarkExporter = new WatermarkDeltaExporter(jsonlExporter, parquetExporter);
+        var changeLogExporter = new ChangeLogDeltaExporter(jsonlExporter, parquetExporter);
+        var manifestManager = new DeltaManifestManager();
+
+        return (watermarkExporter, changeLogExporter, manifestManager);
+    }
+}

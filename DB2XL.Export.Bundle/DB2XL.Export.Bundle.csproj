@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <WarningsNotAsErrors>NU1605</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DB2XL.Core\DB2XL.Core.csproj" />
+    <ProjectReference Include="..\DB2XL.Data\DB2XL.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.102.3" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
+    <PackageReference Include="System.Text.Json" Version="9.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Services\ManifestGenerator.cs" />
+  </ItemGroup>
+
+</Project>

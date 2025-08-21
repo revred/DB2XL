@@ -16,10 +16,13 @@ public class Program
             ShowBanner();
 
             // Parse command line arguments and execute appropriate command
-            return await Parser.Default.ParseArguments<ExportOptions, AnalyzeOptions>(args)
+            // Create stub classes to maintain command parser structure while Bundle/MCP are temporarily disabled
+            return await Parser.Default.ParseArguments<ExportOptions, AnalyzeOptions, StubBundleOptions, StubMcpOptions>(args)
                 .MapResult(
                     async (ExportOptions opts) => await ExportCommand.Execute(opts),
                     (AnalyzeOptions opts) => Task.FromResult(AnalyzeCommand.Execute(opts)),
+                    (StubBundleOptions opts) => Task.FromResult(HandleDisabledCommand("bundle")),
+                    (StubMcpOptions opts) => Task.FromResult(HandleDisabledCommand("mcp")),
                     errs => Task.FromResult(HandleParseErrors(errs))
                 );
         }
@@ -43,20 +46,28 @@ public class Program
             [yellow]Commands:[/]
               [green]export[/]   Export SQLite database to Excel or JSONL with advanced filtering
               [green]analyze[/]  Analyze database structure, PKs, and performance metrics
+              [dim]bundle[/]   Export to structured bundle with JSONL partitions and AI manifests (temporarily disabled)
+              [dim]mcp[/]      Start MCP server for AI assistant integration (temporarily disabled)
             
             [yellow]Basic Examples:[/]
               [dim]sqlitexport export data.db output.xlsx --transform[/]
               [dim]sqlitexport analyze logs.db --pk-discovery --suggest-indexes[/]
+              [dim]sqlitexport bundle app.db ./bundle_output --samples[/]
               [dim]sqlitexport export trades.db trades.jsonl --where "amount > 1000"[/]
             
             [yellow]Advanced Filtering:[/]
               [dim]sqlitexport export db.sqlite data.xlsx --filter query.json[/]
               [dim]sqlitexport export db.sqlite data.xlsx --order-by "created_at" --order-desc[/]
             
-            [yellow]Delta Exports:[/]
-              [dim]sqlitexport export db.sqlite delta.xlsx --delta --delta-strategy watermark[/]
-              [dim]sqlitexport export db.sqlite changes.xlsx --install-changelog[/]
-              [dim]sqlitexport export db.sqlite inc.xlsx --delta --checkpoint-file state.json[/]
+            [yellow]Delta Bundle Exports:[/]
+              [dim]sqlitexport bundle app.db ./delta --delta --watermark-column updated_at[/]
+              [dim]sqlitexport bundle logs.db ./inc --delta --delta-strategy changelog[/]
+              [dim]sqlitexport bundle db.db ./bundle --install-changelog[/]
+              [dim]sqlitexport bundle orders.db ./export --delta --pii-config redact.yaml[/]
+            
+            [yellow]AI Integration (MCP):[/]
+              [dim]sqlitexport mcp --stdio[/]
+              [dim]sqlitexport mcp --capabilities-only[/]
             """)
             .Border(BoxBorder.Rounded)
             .BorderColor(Color.Blue);
@@ -97,4 +108,23 @@ public class Program
         
         return 1;
     }
+
+    private static int HandleDisabledCommand(string commandName)
+    {
+        AnsiConsole.MarkupLine($"[yellow]The '{commandName}' command is temporarily disabled.[/]");
+        AnsiConsole.MarkupLine($"[dim]This feature is being updated and will be available in a future release.[/]");
+        AnsiConsole.MarkupLine($"[dim]Available commands: export, analyze[/]");
+        return 1;
+    }
+}
+
+// Stub classes to maintain command parser structure
+[Verb("bundle", HelpText = "Export to structured bundle with JSONL partitions (temporarily disabled).")]
+internal class StubBundleOptions
+{
+}
+
+[Verb("mcp", HelpText = "Start MCP server for AI assistant integration (temporarily disabled).")]
+internal class StubMcpOptions
+{
 }
