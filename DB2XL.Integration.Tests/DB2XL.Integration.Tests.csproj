@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DB2XL.Integration.Tests</RootNamespace>
+    <AssemblyName>DB2XL.Integration.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Authors>DB2XL Contributors</Authors>
+    <Description>DB2XL Integration Tests - Comprehensive test suite for database export functionality</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Test framework packages -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />           <!-- VSTest test host -->
+    <PackageReference Include="xunit" Version="2.9.2" />                              <!-- xUnit test framework -->
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">           <!-- xUnit adapter for VSTest -->
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    
+    <!-- Code coverage -->
+    <PackageReference Include="coverlet.collector" Version="6.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    
+    <!-- Application dependencies (needed for tests) -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
+    <PackageReference Include="ClosedXML" Version="0.102.1" />
+    <PackageReference Include="YamlDotNet" Version="16.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DB2XL.Export.Legacy\DB2XL.Export.Legacy.csproj" />
+    <ProjectReference Include="..\DB2XL.Transform\DB2XL.Transform.csproj" />
+  </ItemGroup>
+
+</Project>

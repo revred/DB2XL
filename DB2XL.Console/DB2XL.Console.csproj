@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DB2XL.Export.Legacy\DB2XL.Export.Legacy.csproj" />
+    <ProjectReference Include="..\DB2XL.Query\DB2XL.Query.csproj" />
+    <ProjectReference Include="..\DB2XL.Core\DB2XL.Core.csproj" />
+    <ProjectReference Include="..\DB2XL.Data\DB2XL.Data.csproj" />
+    <ProjectReference Include="..\DB2XL.Transform\DB2XL.Transform.csproj" />
+    <ProjectReference Include="..\DB2XL.Export.Excel\DB2XL.Export.Excel.csproj" />
+    <ProjectReference Include="..\DB2XL.Export.JsonLines\DB2XL.Export.JsonLines.csproj" />
+    <ProjectReference Include="..\DB2XL.Delta\DB2XL.Delta.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="Spectre.Console" Version="0.50.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DB2XL.Console</AssemblyName>
+    <RootNamespace>DB2XL.Console</RootNamespace>
+    <Authors>DB2XL Contributors</Authors>
+    <Description>DB2XL Console Tool - Enterprise database export and analysis CLI</Description>
+    <PackageTags>db2xl;database;excel;export;console;cli;sqlite</PackageTags>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+</Project>

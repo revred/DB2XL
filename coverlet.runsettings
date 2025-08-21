@@ -5,7 +5,7 @@
       <DataCollector friendlyName="XPlat code coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <Include>[SqliteXport]*,[DB2XL.Query]*,[DB2XL.DeltaExport]*</Include>
+          <Include>[SqliteXport]*,[DB2XL.Query]*,[DB2XL.DeltaExport]*,[DB2XL.Core]*,[DB2XL.Data]*,[DB2XL.Transform]*,[DB2XL.Export.Excel]*,[DB2XL.Export.JsonLines]*</Include>
           <IncludeDirectory>../</IncludeDirectory>
           <SingleHit>false</SingleHit>
           <UseSourceLink>true</UseSourceLink>

@@ -1,6 +1,8 @@
 using Xunit;
 using Microsoft.Data.Sqlite;
 using DB2XL.Query;
+using DB2XL.Core.Models;
+using DB2XL.Core.Utilities;
 
 namespace DB2XL.Query.Tests;
 
@@ -161,13 +163,13 @@ public class PrimaryKeyDiscoveryTests : IDisposable
 
         var idColumn = columns.First(c => c.Name == "id");
         Assert.Equal("INTEGER", idColumn.Type);
-        Assert.Equal(1, idColumn.PrimaryKey);
+        Assert.True(idColumn.IsPrimaryKey);
         Assert.False(idColumn.NotNull); // Even though it's PK, SQLite reports it as nullable
 
         var nameColumn = columns.First(c => c.Name == "name");
         Assert.Equal("TEXT", nameColumn.Type);
         Assert.True(nameColumn.NotNull);
-        Assert.Equal(0, nameColumn.PrimaryKey);
+        Assert.False(nameColumn.IsPrimaryKey);
 
         var ageColumn = columns.First(c => c.Name == "age");
         Assert.Equal("0", ageColumn.DefaultValue);

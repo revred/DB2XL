@@ -1102,7 +1102,7 @@ All exports include comprehensive transformation metadata in the Excel metadata 
 - **[Core Specification](CLAUDE.md)** - Complete DB2XL implementation guide
 - **[Getting Started](GETTING_STARTED.md)** - Step-by-step tutorials
 - **[API Reference](README.md)** - Complete API documentation
-- **[Test Examples](SqliteXport.Tests/Transformers/)** - Comprehensive test suite with examples
+- **[Test Examples](DB2XL.Integration.Tests/Transformers/)** - Comprehensive test suite with examples
 
 ---
 

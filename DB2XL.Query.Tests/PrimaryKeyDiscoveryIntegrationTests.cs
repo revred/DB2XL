@@ -1,6 +1,8 @@
 using Xunit;
 using Microsoft.Data.Sqlite;
 using DB2XL.Query;
+using DB2XL.Core.Models;
+using DB2XL.Core.Utilities;
 
 namespace DB2XL.Query.Tests;
 
@@ -321,12 +323,12 @@ public class PrimaryKeyDiscoveryIntegrationTests : IDisposable
         
         var idColumn = columns.First(c => c.Name == "id");
         Assert.Equal("INTEGER", idColumn.Type);
-        Assert.Equal(1, idColumn.PrimaryKey);
+        Assert.True(idColumn.IsPrimaryKey);
         
         var usernameColumn = columns.First(c => c.Name == "username");
         Assert.Equal("TEXT", usernameColumn.Type);
         Assert.True(usernameColumn.NotNull);
-        Assert.Equal(0, usernameColumn.PrimaryKey);
+        Assert.False(usernameColumn.IsPrimaryKey);
         
         var emailColumn = columns.First(c => c.Name == "email");
         Assert.Equal("TEXT", emailColumn.Type);

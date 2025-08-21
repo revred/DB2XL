@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DB2XL.DeltaExport</AssemblyName>
+    <RootNamespace>DB2XL.DeltaExport</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DB2XL.Query\DB2XL.Query.csproj" />
+    <ProjectReference Include="..\DB2XL.Core\DB2XL.Core.csproj" />
+    <ProjectReference Include="..\DB2XL.Data\DB2XL.Data.csproj" />
+  </ItemGroup>
+
+</Project>

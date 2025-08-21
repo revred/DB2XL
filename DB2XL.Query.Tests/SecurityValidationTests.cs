@@ -148,15 +148,14 @@ namespace DB2XL.Query.Tests
             var sql = "SELECT * FROM users WHERE id = @id AND username = @username";
             var parameters = new Dictionary<string, object?>
             {
-                ["@id"] = 1,
-                ["@username"] = "test"
+                ["id"] = 1,
+                ["username"] = "test"
             };
             
             var validationResult = SafeParameterBinder.ValidateParameters(parameters, sql);
 
-            // Validation might have warnings but should not fail for basic parameter names
-            // The validation can fail if parameter names are considered unsafe
-            Assert.True(validationResult.IsValid || validationResult.Errors.Any(e => e.Contains("Parameter name")));
+            // For basic parameter names like id and username, validation should succeed
+            Assert.True(validationResult.IsValid);
         }
 
         [Theory]

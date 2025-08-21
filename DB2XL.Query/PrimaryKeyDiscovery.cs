@@ -1,95 +1,11 @@
 using Microsoft.Data.Sqlite;
-using System.Security.Cryptography;
-using System.Text;
+using DB2XL.Core.Models;
+using DB2XL.Core.Utilities;
 
 namespace DB2XL.Query;
 
-/// <summary>
-/// Strategy for primary key identification and ordering
-/// </summary>
-public enum PrimaryKeyStrategy
-{
-    /// <summary>
-    /// Explicit primary key columns defined on the table
-    /// </summary>
-    ExplicitPrimaryKey,
-    
-    /// <summary>
-    /// Unique index that serves as a primary key substitute
-    /// </summary>
-    UniqueIndex,
-    
-    /// <summary>
-    /// SQLite implicit rowid column
-    /// </summary>
-    ImplicitRowId,
-    
-    /// <summary>
-    /// Synthesized primary key from hash of all columns
-    /// </summary>
-    SyntheticHash,
-    
-    /// <summary>
-    /// No deterministic ordering available
-    /// </summary>
-    None
-}
 
-/// <summary>
-/// Information about discovered primary key
-/// </summary>
-public sealed record PrimaryKeyInfo
-{
-    /// <summary>
-    /// Strategy used to identify the primary key
-    /// </summary>
-    public PrimaryKeyStrategy Strategy { get; init; }
-    
-    /// <summary>
-    /// Column names that form the primary key (in order)
-    /// </summary>
-    public IReadOnlyList<string> Columns { get; init; } = Array.Empty<string>();
-    
-    /// <summary>
-    /// Human-readable description of the strategy
-    /// </summary>
-    public string Description { get; init; } = string.Empty;
-    
-    /// <summary>
-    /// Whether the ordering is deterministic
-    /// </summary>
-    public bool IsDeterministic { get; init; }
-    
-    /// <summary>
-    /// Additional metadata about the primary key
-    /// </summary>
-    public Dictionary<string, object> Metadata { get; init; } = new();
-}
 
-/// <summary>
-/// Column information from PRAGMA table_info
-/// </summary>
-public sealed record ColumnInfo
-{
-    public int ColumnId { get; init; }
-    public string Name { get; init; } = string.Empty;
-    public string Type { get; init; } = string.Empty;
-    public bool NotNull { get; init; }
-    public string? DefaultValue { get; init; }
-    public int PrimaryKey { get; init; }
-}
-
-/// <summary>
-/// Index information from sqlite_master
-/// </summary>
-public sealed record IndexInfo
-{
-    public string Name { get; init; } = string.Empty;
-    public string TableName { get; init; } = string.Empty;
-    public bool IsUnique { get; init; }
-    public IReadOnlyList<string> Columns { get; init; } = Array.Empty<string>();
-    public string? WhereClause { get; init; }
-}
 
 /// <summary>
 /// Service for discovering primary keys in SQLite tables for deterministic ordering
@@ -195,15 +111,14 @@ public sealed class PrimaryKeyDiscoveryService : IPrimaryKeyDiscoveryService
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            columns.Add(new ColumnInfo
-            {
-                ColumnId = reader.GetInt32(0), // cid
-                Name = reader.GetString(1),    // name
-                Type = reader.GetString(2),    // type
-                NotNull = reader.GetBoolean(3), // notnull
-                DefaultValue = reader.IsDBNull(4) ? null : reader.GetString(4), // dflt_value
-                PrimaryKey = reader.GetInt32(5) // pk
-            });
+            var name = reader.GetString(1);    // name
+            var type = reader.GetString(2);    // type
+            var notNull = reader.GetBoolean(3); // notnull
+            var defaultValue = reader.IsDBNull(4) ? null : reader.GetValue(4); // dflt_value
+            var primaryKeyOrder = reader.GetInt32(5); // pk
+            var isPrimaryKey = primaryKeyOrder > 0;
+            
+            columns.Add(new ColumnInfo(name, type, notNull, defaultValue, isPrimaryKey));
         }
         
         return columns;
@@ -283,8 +198,7 @@ public sealed class PrimaryKeyDiscoveryService : IPrimaryKeyDiscoveryService
     {
         var columns = GetColumns(connection, tableName);
         var pkColumns = columns
-            .Where(c => c.PrimaryKey > 0)
-            .OrderBy(c => c.PrimaryKey)
+            .Where(c => c.IsPrimaryKey)
             .ToList();
         
         if (pkColumns.Count == 0)
@@ -415,42 +329,3 @@ public sealed class PrimaryKeyDiscoveryService : IPrimaryKeyDiscoveryService
     }
 }
 
-/// <summary>
-/// Utilities for generating synthetic primary keys
-/// </summary>
-public static class SyntheticPrimaryKeyGenerator
-{
-    /// <summary>
-    /// Generates a deterministic hash from row values for synthetic primary key
-    /// </summary>
-    /// <param name="columnValues">Column values in order</param>
-    /// <returns>SHA256 hash as hexadecimal string</returns>
-    public static string GenerateRowHash(IReadOnlyList<object?> columnValues)
-    {
-        using var sha256 = SHA256.Create();
-        var combined = new StringBuilder();
-        
-        for (int i = 0; i < columnValues.Count; i++)
-        {
-            if (i > 0)
-            {
-                combined.Append('\x1F'); // Unit separator
-            }
-            
-            var value = columnValues[i];
-            if (value == null)
-            {
-                combined.Append('\x00'); // Null marker
-            }
-            else
-            {
-                combined.Append(value.ToString());
-            }
-        }
-        
-        var bytes = Encoding.UTF8.GetBytes(combined.ToString());
-        var hash = sha256.ComputeHash(bytes);
-        
-        return Convert.ToHexString(hash);
-    }
-}

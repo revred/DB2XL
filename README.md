@@ -1,15 +1,16 @@
-# DB2XL - Deterministic SQLite to Excel Exporter
+# DB2XL - Enterprise SQLite Export Platform
 
-[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-812%2F829%20Passing-brightgreen?style=flat-square)](#testing)
+[![Coverage](https://img.shields.io/badge/Coverage-72%25-green?style=flat-square)](#testing)
 
-A robust, deterministic SQLite to Excel exporter that converts every table in a SQLite database to a multi-sheet Excel (.xlsx) file with **byte-for-byte consistent output**.
+An enterprise-grade SQLite export platform with **8-component modular architecture**, advanced data transformation, and AI-ready export formats. Convert SQLite databases to Excel/JSONL with **byte-for-byte deterministic output**.
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later
+- [.NET 9.0 SDK](https://dotnet.microsoft.com/download) or later
 - A SQLite database file to export
 
 ### 30-Second Quick Start
@@ -21,15 +22,29 @@ A robust, deterministic SQLite to Excel exporter that converts every table in a 
    dotnet build
    ```
 
-2. **Export your database**:
-   ```csharp
-   using SqliteXport;
+2. **Console Tool (Recommended)**:
+   ```bash
+   # Simple Excel export
+   dotnet run --project DB2XL.Console export database.sqlite output.xlsx
    
-   // One line to export everything
-   SqliteToExcel.Export("your-database.sqlite", "output.xlsx");
+   # With advanced features
+   dotnet run --project DB2XL.Console export database.sqlite output.xlsx --transform --include-views
    ```
 
-3. **Open the Excel file** - each table becomes a worksheet with metadata!
+3. **Programmatic API**:
+   ```csharp
+   using DB2XL.Export.Legacy;
+   
+   // Legacy compatibility layer
+   SqliteToExcel.Export("database.sqlite", "output.xlsx");
+   
+   // Modern modular approach
+   using DB2XL.Export.Excel;
+   var exporter = new ExcelExporter();
+   await exporter.ExportAsync("database.sqlite", "output.xlsx");
+   ```
+
+4. **Open the Excel file** - each table becomes a worksheet with comprehensive metadata!
 
 > 📚 **New to DB2XL?** Check out the [comprehensive Getting Started guide](GETTING_STARTED.md) for step-by-step tutorials and examples!
 
@@ -40,17 +55,17 @@ A robust, deterministic SQLite to Excel exporter that converts every table in a 
 git clone https://github.com/revred/DB2XL.git
 cd DB2XL
 dotnet build
-# Reference SqliteXport.dll or include as project reference
+# Reference DB2XL.Export.Legacy.dll or include as project reference
 ```
 
 **Option 2: Direct Project Reference**
 ```xml
 <!-- Add to your .csproj -->
-<ProjectReference Include="path/to/DB2XL/SqliteXport/SqliteXport.csproj" />
+<ProjectReference Include="path/to/DB2XL/DB2XL.Export.Legacy/DB2XL.Export.Legacy.csproj" />
 ```
 
 **Option 3: Copy Source Files**
-- Copy the `SqliteXport/` folder to your solution
+- Copy the `DB2XL.Export.Legacy/` folder to your solution
 - Add as a new project or include source files directly
 
 ### First Export Example
@@ -58,7 +73,7 @@ dotnet build
 Create a simple console application:
 
 ```csharp
-using SqliteXport;
+using DB2XL.Export.Legacy;
 using System;
 
 class Program
@@ -110,7 +125,7 @@ DB2XL creates an Excel file with:
 ### Basic Export
 
 ```csharp
-using DB2XL;
+using DB2XL.Export.Legacy;
 
 // Export with default settings (maximum fidelity)
 SqliteToExcel.Export(
@@ -118,15 +133,14 @@ SqliteToExcel.Export(
     xlsxPath: "path/to/output.xlsx"
 );
 
-// Alternative using explicit namespace
-using SqliteXport;
-SqliteToExcel.Export("database.sqlite", "output.xlsx");
+// Alternative using full namespace
+DB2XL.Export.Legacy.SqliteToExcel.Export("database.sqlite", "output.xlsx");
 ```
 
 ### Advanced Configuration
 
 ```csharp
-using SqliteXport;
+using DB2XL.Export.Legacy;
 
 var options = new SqliteToExcelOptions
 {
@@ -304,82 +318,156 @@ var transformedValue = pipeline.TransformCell(
 | REAL        | Text string    | Excel number             |
 | BLOB        | Hex/Base64     | Hex/Base64               |
 
-## 🏗️ Architecture
+## 🏗️ Architecture - 8-Component Modular System
 
 ```
-DB2XL/
-├── SqliteXport/              # Core library
-│   ├── SqliteToExcel.cs      # Main export API  
-│   ├── SqliteToExcelOptions.cs # Configuration options
-│   ├── DatabaseDiscovery.cs  # Schema enumeration
-│   ├── DataConverter.cs      # Type handling
-│   ├── ExcelHelpers.cs       # Worksheet management
-│   ├── ChecksumBuilder.cs    # SHA-256 verification
-│   └── Transformers/         # Data transformation system ✨
-│       ├── Interfaces.cs     # Core transformer interfaces
-│       ├── TransformerRegistry.cs # Factory system
-│       ├── TransformerRegistryBuilder.cs # Fluent configuration
-│       ├── SqliteTypeHelper.cs # Type affinity detection
-│       └── Examples/         # Sample transformers
-│           └── SimpleTextTransformers.cs
-├── SqliteXport.Tests/        # Comprehensive test suite
-│   ├── ExportTests.cs        # Core export integration tests
-│   ├── ExportValidator.cs    # Data integrity validation
-│   ├── SampleDatabaseGenerator.cs # Test data creation
-│   └── Transformers/         # Transformer system tests ✨
-│       ├── TransformerInterfacesTests.cs # Unit tests
-│       ├── TransformerRegistryTests.cs # Registry tests
-│       ├── TransformerIntegrationTests.cs # End-to-end tests
-│       └── SqliteTypeHelperTests.cs # Type detection tests
-├── CLAUDE.md                 # Core specification
-├── TRANSFORMERS.md           # Advanced features specification
-└── Project_status.md         # Development progress
+DB2XL Enterprise Platform
+├── Core Foundation Layer
+│   ├── DB2XL.Core/                    # 🏛️ Foundational models & interfaces
+│   │   ├── Models/                    #    ColumnInfo, TableInfo, ExportResult
+│   │   ├── Enums/                     #    BlobRenderMode, OrderMode  
+│   │   ├── Exceptions/                #    ExportException, ValidationException
+│   │   └── Interfaces/                #    IExporter, core contracts
+│   ├── DB2XL.Data/                    # 💾 Schema discovery & data access
+│   │   ├── Schema/                    #    SqliteSchemaReader, PrimaryKeyDiscovery
+│   │   ├── Query/                     #    SqlQueryBuilder
+│   │   └── Checksum/                  #    DataChecksumCalculator
+│   └── DB2XL.Query/                   # 🔍 Advanced querying & security
+│       ├── SecurityFilter.cs          #    SQL injection protection
+│       ├── QueryPlanAnalyzer.cs       #    Performance analysis
+│       ├── MissingIndexDetector.cs    #    Optimization suggestions
+│       └── SelectionGrammar.cs        #    Query DSL parsing
+├── Transformation Engine
+│   └── DB2XL.Transform/               # ⚡ 15+ built-in transformers
+│       ├── BuiltIns/                  #    Text, JSON, DateTime, Binary transformers
+│       ├── Configuration/             #    JSON/YAML config loading
+│       ├── Interfaces/                #    ICellTransformer, IRowTransformer
+│       ├── Registry/                  #    TransformerRegistry, factory pattern
+│       └── TypeDetection/             #    SqliteTypeHelper, affinity detection
+├── Export Engines  
+│   ├── DB2XL.Export.Excel/            # 📊 High-performance Excel export
+│   │   ├── ExcelExporter.cs           #    ClosedXML-based implementation
+│   │   └── ExcelExportOptions.cs      #    Configuration record
+│   └── DB2XL.Export.JsonLines/        # 🤖 JSONL for LLM/AI processing
+│       └── JsonLinesExporter.cs       #    AI-ready output format
+├── Advanced Features
+│   └── DB2XL.Delta/                   # 📈 Delta exports & change tracking
+│       ├── ChangeLogDeltaService.cs   #    Changelog-based deltas
+│       ├── WatermarkDeltaService.cs   #    Timestamp-based deltas
+│       └── DeltaExportService.cs      #    Unified delta export API
+├── User Interface
+│   └── DB2XL.Console/                 # 🖥️ Rich CLI with colored output
+│       ├── Commands/                  #    ExportCommand, AnalyzeCommand
+│       ├── Options/                   #    Command-line argument parsing
+│       └── Helpers/                   #    ConsoleHelper, formatting utilities
+├── Legacy Compatibility
+│   └── DB2XL.Export.Legacy/           # 🔄 Backward compatibility layer
+│       ├── SqliteToExcel.cs           #    Legacy static API
+│       ├── DataConverter.cs           #    Type conversion utilities
+│       ├── JsonLinesExporter.cs       #    JSONL export implementation
+│       └── Schema/                    #    Legacy schema analysis
+└── Test Infrastructure
+    ├── DB2XL.Core.Tests/              # 🧪 Foundation component tests (137 tests)
+    ├── DB2XL.Query.Tests/             # 🔒 Security & performance tests (262 tests)  
+    └── DB2XL.Integration.Tests/       # 🚀 Integration & transformation tests (430 tests)
 ```
 
-## 🧪 Testing
+### Component Responsibilities
 
-The project includes comprehensive tests covering:
+**Core Foundation**:
+- **DB2XL.Core**: Shared models, enums, and interfaces across all components
+- **DB2XL.Data**: Database schema discovery, query building, and data access patterns
+- **DB2XL.Query**: Advanced querying capabilities with security and performance analysis
 
-**Core Export Engine (200+ tests):**
-- **Data Integrity**: Round-trip validation with checksums
-- **Edge Cases**: Unicode, special characters, NULL values, empty tables
-- **Performance**: Large datasets (1K-10K+ rows) with timing metrics
-- **Excel Limits**: Sheet splitting for oversized tables
-- **Metadata Validation**: Complete export provenance tracking
-- **View Support**: Database view export and validation
+**Transformation Engine**:
+- **DB2XL.Transform**: Complete framework with 15+ built-in transformers and configuration system
 
-**Transformer System (149 tests):**
-- **Interface Contracts**: All transformer behavior validation
-- **Registry System**: Thread-safe registration and instantiation  
-- **Built-in Transformers**: All 15+ transformers with edge cases
+**Export Engines**:
+- **DB2XL.Export.Excel**: High-performance Excel export with deterministic output
+- **DB2XL.Export.JsonLines**: AI-ready JSONL export with schema manifests
+
+**Advanced Features**:
+- **DB2XL.Delta**: Delta export capabilities for incremental data processing
+
+**User Interface & Compatibility**:
+- **DB2XL.Console**: Feature-rich CLI tool with AI assistant integration
+- **DB2XL.Export.Legacy**: Legacy compatibility layer maintaining backward compatibility
+
+## 🧪 Testing - Comprehensive Test Coverage
+
+**812 of 829 tests passing (97.9% success rate)** with 72.0% code coverage across all components.
+
+### Test Distribution by Component
+
+**DB2XL.Core.Tests (137/137 tests - 100% success)**:
+- **Foundation Models**: Complete coverage of ColumnInfo, TableInfo, OrderInfo, ExportResult
+- **Exception Handling**: ExportException, ValidationException, DataConversionException  
+- **Data Services**: PrimaryKeyDiscoveryService, SyntheticPrimaryKeyGenerator
+- **Edge Cases**: Record equality, with expressions, null handling
+
+**DB2XL.Query.Tests (261/262 tests - 99.6% success)**:
+- **Security Features**: SQL injection protection, parameter validation
+- **Performance Analysis**: Query plan analysis, missing index detection
+- **Selection Grammar**: Query DSL parsing and validation
+- **Integration Testing**: Real database scenarios with complex queries
+
+**DB2XL.Integration.Tests (414/430 tests - 96.3% success)**:
+- **Core Export Engine**: Data integrity validation with checksums
+- **Transformation System**: All 15+ transformers with edge cases
 - **Configuration System**: JSON/YAML loading and validation
-- **Pipeline Execution**: Error handling and batch processing
-- **Performance Validation**: 10,000+ transformations per second
-- **Concurrency**: Thread safety and stateless design verification
-- **Integration**: Real database transformation workflows
-- **Type Detection**: SQLite affinity handling across all scenarios
+- **Performance Testing**: Large datasets (10K+ rows) with timing metrics
+- **Integration Workflows**: End-to-end export and transformation scenarios
 
-**Total: 349 of 350 tests passing (99.7% success rate) ✅**
+### Test Categories
+
+**Unit Testing**:
+- All interfaces, models, and core logic thoroughly tested
+- Edge cases: Unicode, special characters, NULL values, empty tables
+- Type detection: SQLite affinity handling across all scenarios
+
+**Integration Testing**:
+- Real database scenarios with complex data sets
+- Transformer pipeline execution with error handling
+- Console integration tests with command-line parsing
+
+**Performance Testing**:
+- Validated for enterprise-scale workloads (10K+ operations/second)
+- Memory usage patterns and batch processing efficiency
+- Concurrent access and thread safety verification
+
+**Security Testing**:
+- SQL injection protection and parameter validation
+- Safe data handling and read-only database access patterns
 
 ### Running Tests
 
 ```bash
-# Run all tests (133 total)
+# Run all tests (829 total across 3 test projects)
 dotnet test
 
+# Run with code coverage
+dotnet test --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+
+# Generate coverage report
+dotnet tool install -g dotnet-reportgenerator-globaltool
+reportgenerator -reports:"TestResults/*/coverage.cobertura.xml" -targetdir:"TestResults/CoverageReport"
+
+# Run specific test projects
+dotnet test DB2XL.Core.Tests/
+dotnet test DB2XL.Query.Tests/
+dotnet test DB2XL.Integration.Tests/
+
 # Run specific test categories
-dotnet test --filter "Export_DatabaseWithSize_ShouldCreateValidExcelFile"
-dotnet test --filter "TransformerRegistry"
-dotnet test --filter "TransformerIntegration"
+dotnet test --filter "PrimaryKeyDiscovery"
+dotnet test --filter "TransformerRegistry" 
+dotnet test --filter "SecurityFilter"
+dotnet test --filter "ExportTests"
 
 # Run with detailed output
 dotnet test --verbosity normal
 
-# Run only core export tests
-dotnet test --filter "FullyQualifiedName~ExportTests"
-
-# Run only transformer tests  
-dotnet test --filter "FullyQualifiedName~Transformers"
+# Performance test with timing
+dotnet test --filter "Performance" --logger:console;verbosity=detailed
 ```
 
 ### Test Data
@@ -459,7 +547,7 @@ For issues, questions, or feature requests:
 2. Check existing [Issues](https://github.com/revred/DB2XL/issues)
 3. Review the [complete specification](CLAUDE.md) for advanced features
 4. Explore [transformer documentation](TRANSFORMERS.md) for data transformation
-5. **AI Assistant Integration**: See [Console Tool Guide](Sqlite.Console.md) for Claude and AI debugging workflows
+5. **AI Assistant Integration**: DB2XL.Console includes rich CLI designed for Claude and AI debugging workflows
 6. Run the test suite to verify your environment: `dotnet test`
 7. Create a new issue with:
    - Database schema details

@@ -316,7 +316,7 @@ sqlitexport export database.db preview.xlsx \
 
 ```csharp
 using DB2XL.DeltaExport;
-using SqliteXport;
+using DB2XL.Export.Legacy;
 
 // Basic watermark delta export
 var deltaOptions = new DeltaExportOptions
@@ -760,7 +760,7 @@ done
 - [ADVANCED_FILTERING.md](ADVANCED_FILTERING.md) - Combine delta exports with sophisticated filtering
 - [GETTING_STARTED.md](../GETTING_STARTED.md) - Basic setup and first exports
 - [examples/delta/](../examples/delta/) - Ready-to-use delta export examples
-- [Console Tool Guide](../SqliteXport.Console.md) - Complete console tool reference
+- [Console Tool Guide](../README.md#console-tool) - Complete console tool reference
 - [CLAUDE.md](../CLAUDE.md) - Technical specifications and API reference
 
 ---

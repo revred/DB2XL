@@ -9,8 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DB2XL.Core\DB2XL.Core.csproj" />
+    <ProjectReference Include="..\DB2XL.Data\DB2XL.Data.csproj" />
   </ItemGroup>
 
 </Project>

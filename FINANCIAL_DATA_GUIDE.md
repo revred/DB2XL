@@ -167,7 +167,7 @@ Based on testing with real ODTE financial databases:
 // Export PM212 trading ledger
 SqliteToExcel.Export(
     @"C:\code\ODTE\audit\PM212_Trading_Ledger_2005_2025.db",
-    @"C:\exports\PM212_TradingData.xlsx",
+    @"C:\code\DB2XL\exports\PM212_TradingData.xlsx",
     new SqliteToExcelOptions
     {
         WriteAllAsText = true,

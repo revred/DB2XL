@@ -19,12 +19,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DB2XL.Query\DB2XL.Query.csproj" />
-    <ProjectReference Include="..\DB2XL.DeltaExport\DB2XL.DeltaExport.csproj" />
+    <ProjectReference Include="..\DB2XL.Delta\DB2XL.Delta.csproj" />
+    <ProjectReference Include="..\DB2XL.Transform\DB2XL.Transform.csproj" />
   </ItemGroup>
 
 </Project>

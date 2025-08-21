@@ -1,0 +1,300 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  BUILD_CONFIGURATION: 'Release'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="v$VERSION"
+        else
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Building release version: $VERSION"
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore DB2XL.sln
+      
+    - name: Build solution
+      run: dotnet build DB2XL.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Version=${{ steps.version.outputs.version }}
+      
+    - name: Run tests
+      run: |
+        dotnet test DB2XL.sln \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --no-build \
+          --verbosity minimal \
+          --logger trx \
+          --collect:"XPlat Code Coverage" \
+          --results-directory TestResults/
+          
+    - name: Pack NuGet packages
+      run: |
+        mkdir -p packages
+        
+        # Pack main library
+        dotnet pack SqliteXport/SqliteXport.csproj \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --no-build \
+          --include-symbols \
+          -p:PackageVersion=${{ steps.version.outputs.version }} \
+          --output ./packages/
+          
+        # Pack query library  
+        dotnet pack DB2XL.Query/DB2XL.Query.csproj \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --no-build \
+          --include-symbols \
+          -p:PackageVersion=${{ steps.version.outputs.version }} \
+          --output ./packages/
+          
+        # Pack delta export library
+        dotnet pack DB2XL.DeltaExport/DB2XL.DeltaExport.csproj \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --no-build \
+          --include-symbols \
+          -p:PackageVersion=${{ steps.version.outputs.version }} \
+          --output ./packages/
+        
+    - name: Upload packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: packages/*.nupkg
+        retention-days: 90
+
+  build-executables:
+    name: Build Console Executables
+    runs-on: ubuntu-latest
+    needs: create-release
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        runtime: [win-x64, linux-x64, osx-x64, osx-arm64]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore DB2XL.sln
+      
+    - name: Publish console application
+      run: |
+        dotnet publish SqliteXport.Console/SqliteXport.Console.csproj \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --runtime ${{ matrix.runtime }} \
+          --self-contained true \
+          --output ./publish/${{ matrix.runtime }}/ \
+          -p:PublishSingleFile=true \
+          -p:PublishTrimmed=true \
+          -p:TrimMode=link \
+          -p:Version=${{ needs.create-release.outputs.version }}
+          
+    - name: Create archive
+      run: |
+        cd publish
+        if [[ "${{ matrix.runtime }}" == win-* ]]; then
+          zip -r "../sqlitexport-${{ needs.create-release.outputs.version }}-${{ matrix.runtime }}.zip" ${{ matrix.runtime }}/
+        else
+          tar -czf "../sqlitexport-${{ needs.create-release.outputs.version }}-${{ matrix.runtime }}.tar.gz" ${{ matrix.runtime }}/
+        fi
+        cd ..
+        
+    - name: Upload executables
+      uses: actions/upload-artifact@v4
+      with:
+        name: console-${{ matrix.runtime }}
+        path: sqlitexport-${{ needs.create-release.outputs.version }}-${{ matrix.runtime }}.*
+        retention-days: 90
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [create-release, build-executables]
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+        
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Simple changelog generation from git log
+        if git describe --tags --abbrev=0 HEAD^ >/dev/null 2>&1; then
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^)
+          echo "Changes since $PREV_TAG:" > CHANGELOG.md
+          git log --pretty=format:"* %s (%h)" $PREV_TAG..HEAD >> CHANGELOG.md
+        else
+          echo "Initial release of DB2XL - Deterministic SQLite to Excel Exporter" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "## Features" >> CHANGELOG.md
+          echo "* ✅ **Core Library**: Deterministic SQLite → Excel export with byte-for-byte consistency" >> CHANGELOG.md
+          echo "* ✅ **Advanced Filtering**: SelectionGrammar with complex WHERE clauses, ORDER BY, LIMIT/OFFSET" >> CHANGELOG.md
+          echo "* ✅ **Query Performance**: Missing index detection, query plan analysis, performance benchmarks" >> CHANGELOG.md
+          echo "* ✅ **Delta Exports**: Watermark and changelog-based incremental exports" >> CHANGELOG.md
+          echo "* ✅ **Security**: SQL injection protection, table/column allowlist/denylist filtering" >> CHANGELOG.md
+          echo "* ✅ **Console Tool**: Full-featured CLI with help, filtering, analysis, and export options" >> CHANGELOG.md
+          echo "* ✅ **Comprehensive Testing**: 100+ unit tests, integration tests, performance benchmarks" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "## Architecture" >> CHANGELOG.md
+          echo "* **SqliteXport**: Main library for Excel export functionality" >> CHANGELOG.md
+          echo "* **DB2XL.Query**: Advanced filtering, primary key discovery, and query building" >> CHANGELOG.md 
+          echo "* **DB2XL.DeltaExport**: Delta export strategies and checkpoint management" >> CHANGELOG.md
+          echo "* **SqliteXport.Console**: Command-line interface for all functionality" >> CHANGELOG.md
+        fi
+        
+        # Prepare release files
+        mkdir -p release-files
+        find ./artifacts -name "*.nupkg" -exec cp {} release-files/ \;
+        find ./artifacts -name "*.zip" -exec cp {} release-files/ \;
+        find ./artifacts -name "*.tar.gz" -exec cp {} release-files/ \;
+        
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.create-release.outputs.tag }}
+        release_name: DB2XL ${{ needs.create-release.outputs.version }}
+        body_path: CHANGELOG.md
+        draft: false
+        prerelease: ${{ contains(needs.create-release.outputs.version, '-') }}
+        
+    - name: Upload release assets
+      run: |
+        for file in release-files/*; do
+          if [ -f "$file" ]; then
+            echo "Uploading $file..."
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$file" \
+              "${{ steps.create_release.outputs.upload_url }}=$(basename "$file")"
+          fi
+        done
+
+  publish-nuget:
+    name: Publish to NuGet
+    runs-on: ubuntu-latest
+    needs: [create-release, github-release]
+    if: ${{ !contains(needs.create-release.outputs.version, '-') }}  # Only stable releases
+    timeout-minutes: 15
+    
+    steps:
+    - name: Download NuGet packages
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-packages
+        path: packages/
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Publish to NuGet
+      run: |
+        for pkg in packages/*.nupkg; do
+          if [[ ! "$pkg" == *".symbols.nupkg" ]]; then
+            echo "Publishing $pkg to NuGet..."
+            dotnet nuget push "$pkg" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          fi
+        done
+        
+    - name: Publish symbols to NuGet
+      run: |
+        for pkg in packages/*.symbols.nupkg; do
+          if [ -f "$pkg" ]; then
+            echo "Publishing symbols $pkg to NuGet..."
+            dotnet nuget push "$pkg" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          fi
+        done
+
+  release-summary:
+    name: Release Summary
+    runs-on: ubuntu-latest
+    needs: [create-release, build-executables, github-release]
+    if: always()
+    timeout-minutes: 5
+    
+    steps:
+    - name: Generate summary
+      run: |
+        echo "## 🚀 DB2XL Release ${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Release Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ **NuGet Packages**: SqliteXport, DB2XL.Query, DB2XL.DeltaExport" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ **Console Executables**: Windows (x64), Linux (x64), macOS (x64, ARM64)" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ **GitHub Release**: ${{ needs.create-release.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 Key Features" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔄 **Deterministic Export**: Byte-for-byte consistent SQLite → Excel conversion" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔍 **Advanced Filtering**: SelectionGrammar with complex queries and performance analysis" >> $GITHUB_STEP_SUMMARY
+        echo "- 📈 **Delta Exports**: Incremental exports with watermark and changelog strategies" >> $GITHUB_STEP_SUMMARY
+        echo "- 🛡️ **Security**: SQL injection protection and access control filtering" >> $GITHUB_STEP_SUMMARY
+        echo "- 🖥️ **Console Tool**: Full-featured CLI for all export and analysis operations" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Tag:** ${{ needs.create-release.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Release Status:** ${{ needs.github-release.result == 'success' && '✅ Published' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY

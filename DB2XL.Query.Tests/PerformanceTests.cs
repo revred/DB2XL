@@ -1,4 +1,5 @@
 using DB2XL.Query;
+using DB2XL.Core.Models;
 using Microsoft.Data.Sqlite;
 using System.Diagnostics;
 using Xunit;

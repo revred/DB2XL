@@ -41,8 +41,8 @@ This is a **proprietary software project**. All contributions are subject to the
 
 ```
 DB2XL/
-├── SqliteXport/              # Core library
-├── SqliteXport.Tests/        # Test suite  
+├── DB2XL.Export.Legacy/      # Core library (legacy compatibility)
+├── DB2XL.Integration.Tests/  # Test suite  
 ├── CLAUDE.md                 # Complete specification
 ├── README.md                 # Project documentation
 └── DB2XL.sln                 # Solution file

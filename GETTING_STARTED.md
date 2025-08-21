@@ -14,7 +14,7 @@ By the end of this guide, you'll know how to:
 
 ## 📋 Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later
+- [.NET 9.0 SDK](https://dotnet.microsoft.com/download) or later
 - A SQLite database file (we'll create one if you don't have one)
 - Basic familiarity with C# (optional - examples provided)
 
@@ -41,7 +41,7 @@ You should see: `Passed! - Failed: 0, Passed: 400, Skipped: 0` (100% success rat
 
 ### Build the Console Tool
 ```bash
-dotnet build SqliteXport.Console
+dotnet build DB2XL.Console
 ```
 
 ## 🚀 Step 2: Quick Start with Console Tool
@@ -51,25 +51,25 @@ The fastest way to inspect a SQLite database:
 
 ```bash
 # Analyze database structure and content
-dotnet run --project SqliteXport.Console -- analyze sample.sqlite
+dotnet run --project DB2XL.Console -- analyze sample.sqlite
 
 # Include data samples and performance metrics
-dotnet run --project SqliteXport.Console -- analyze sample.sqlite --include-data --performance
+dotnet run --project DB2XL.Console -- analyze sample.sqlite --include-data --performance
 
 # Check database integrity
-dotnet run --project SqliteXport.Console -- analyze sample.sqlite --check-integrity
+dotnet run --project DB2XL.Console -- analyze sample.sqlite --check-integrity
 ```
 
 ### Export with One Command
 ```bash
 # Export to Excel with intelligent transformations
-dotnet run --project SqliteXport.Console -- export sample.sqlite output.xlsx --transform
+dotnet run --project DB2XL.Console -- export sample.sqlite output.xlsx --transform
 
 # Export to JSONL for AI/ML processing
-dotnet run --project SqliteXport.Console -- export sample.sqlite output/ --format jsonl --transform
+dotnet run --project DB2XL.Console -- export sample.sqlite output/ --format jsonl --transform
 
 # Export with dual sheets (raw + transformed data)
-dotnet run --project SqliteXport.Console -- export sample.sqlite report.xlsx --dual-sheets --metadata
+dotnet run --project DB2XL.Console -- export sample.sqlite report.xlsx --dual-sheets --metadata
 ```
 
 ## 📊 Step 3: Programmatic API (Your First Export)
@@ -109,7 +109,7 @@ cmd.ExecuteNonQuery();
 Now let's export it to Excel:
 
 ```csharp
-using SqliteXport;
+using DB2XL.Export.Legacy;
 
 // One line export with default settings
 SqliteToExcel.Export("sample.sqlite", "employees.xlsx");
@@ -127,7 +127,7 @@ Open `employees.xlsx` and you'll find:
 Let's create a more sophisticated export:
 
 ```csharp
-using SqliteXport;
+using DB2XL.Export.Legacy;
 
 var options = new SqliteToExcelOptions
 {
@@ -158,13 +158,13 @@ The console tool includes **22 built-in transformers** for making data human-rea
 
 ```bash
 # Export with automatic transformations
-dotnet run --project SqliteXport.Console -- export app.db readable.xlsx --transform
+dotnet run --project DB2XL.Console -- export app.db readable.xlsx --transform
 
 # Use custom transformation config
-dotnet run --project SqliteXport.Console -- export app.db custom.xlsx --config transforms.json
+dotnet run --project DB2XL.Console -- export app.db custom.xlsx --config transforms.json
 
 # Preview transformations without exporting
-dotnet run --project SqliteXport.Console -- export app.db preview.xlsx --dry-run --transform
+dotnet run --project DB2XL.Console -- export app.db preview.xlsx --dry-run --transform
 ```
 
 ### Configuration-Driven Transformations
@@ -259,17 +259,17 @@ SqliteToExcel.Export("database.sqlite", "output.xlsx", options);
 ### Console Tool Patterns
 ```bash
 # Debug application database
-dotnet run --project SqliteXport.Console -- analyze app.db --check-integrity --performance
-dotnet run --project SqliteXport.Console -- export app.db debug.xlsx --dual-sheets --metadata
+dotnet run --project DB2XL.Console -- analyze app.db --check-integrity --performance
+dotnet run --project DB2XL.Console -- export app.db debug.xlsx --dual-sheets --metadata
 
 # Export logs for analysis
-dotnet run --project SqliteXport.Console -- export logs.db recent.xlsx --where "timestamp > datetime('now', '-1 hour')" --transform
+dotnet run --project DB2XL.Console -- export logs.db recent.xlsx --where "timestamp > datetime('now', '-1 hour')" --transform
 
 # ML data preparation
-dotnet run --project SqliteXport.Console -- export features.db training.jsonl --format jsonl --transform --exclude "id,created_at"
+dotnet run --project DB2XL.Console -- export features.db training.jsonl --format jsonl --transform --exclude "id,created_at"
 
 # Schema documentation
-dotnet run --project SqliteXport.Console -- analyze schema.db --output schema.json --format json
+dotnet run --project DB2XL.Console -- analyze schema.db --output schema.json --format json
 ```
 
 ### Programmatic Patterns
@@ -348,7 +348,7 @@ cat > query.json << EOF
 EOF
 
 # Apply the filter
-dotnet run --project SqliteXport.Console -- export database.sqlite filtered.xlsx --filter query.json
+dotnet run --project DB2XL.Console -- export database.sqlite filtered.xlsx --filter query.json
 ```
 
 ### Delta Exports (Incremental Changes)
@@ -356,14 +356,14 @@ Export only what's changed since your last export:
 
 ```bash
 # Watermark-based delta export (auto-detects timestamp columns)
-dotnet run --project SqliteXport.Console -- export db.sqlite changes.xlsx --delta
+dotnet run --project DB2XL.Console -- export db.sqlite changes.xlsx --delta
 
 # Specify watermark columns
-dotnet run --project SqliteXport.Console -- export db.sqlite delta.xlsx \
+dotnet run --project DB2XL.Console -- export db.sqlite delta.xlsx \
   --delta --watermark-columns "updated_at,modified_at"
 
 # Use checkpoint for true incremental exports
-dotnet run --project SqliteXport.Console -- export db.sqlite incremental.xlsx \
+dotnet run --project DB2XL.Console -- export db.sqlite incremental.xlsx \
   --delta --checkpoint-file last_export.json
 ```
 
@@ -372,10 +372,10 @@ Track all database changes with automatic triggers:
 
 ```bash
 # Install change tracking triggers
-dotnet run --project SqliteXport.Console -- export db.sqlite setup.xlsx --install-changelog
+dotnet run --project DB2XL.Console -- export db.sqlite setup.xlsx --install-changelog
 
 # Export captured changes
-dotnet run --project SqliteXport.Console -- export db.sqlite changes.xlsx \
+dotnet run --project DB2XL.Console -- export db.sqlite changes.xlsx \
   --delta --delta-strategy changelog
 ```
 
@@ -384,15 +384,15 @@ Discover primary keys and get performance recommendations:
 
 ```bash
 # Full PK discovery with quality scores
-dotnet run --project SqliteXport.Console -- analyze db.sqlite \
+dotnet run --project DB2XL.Console -- analyze db.sqlite \
   --pk-discovery --pk-strategy --pk-quality --deterministic-order
 
 # Get index suggestions for large tables
-dotnet run --project SqliteXport.Console -- analyze db.sqlite \
+dotnet run --project DB2XL.Console -- analyze db.sqlite \
   --suggest-indexes --performance
 
 # Export analysis results
-dotnet run --project SqliteXport.Console -- analyze db.sqlite \
+dotnet run --project DB2XL.Console -- analyze db.sqlite \
   --output analysis.json --format json
 ```
 
@@ -425,7 +425,7 @@ You now know how to:
 ## ❓ Need Help?
 
 - **Issues**: Check [GitHub Issues](https://github.com/revred/DB2XL/issues)
-- **Examples**: Look at the test files in `SqliteXport.Tests/`
+- **Examples**: Look at the test files in `DB2XL.Integration.Tests/`
 - **Source code**: Everything is documented with XML comments
 
 ## 🏃‍♂️ Quick Reference
@@ -433,13 +433,13 @@ You now know how to:
 ### Console Tool Commands
 ```bash
 # Quick analysis
-dotnet run --project SqliteXport.Console -- analyze database.sqlite
+dotnet run --project DB2XL.Console -- analyze database.sqlite
 
 # Export with transformations
-dotnet run --project SqliteXport.Console -- export database.sqlite output.xlsx --transform
+dotnet run --project DB2XL.Console -- export database.sqlite output.xlsx --transform
 
 # JSONL export for AI/ML
-dotnet run --project SqliteXport.Console -- export database.sqlite output/ --format jsonl --transform
+dotnet run --project DB2XL.Console -- export database.sqlite output/ --format jsonl --transform
 ```
 
 ### Programmatic API

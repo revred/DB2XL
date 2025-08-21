@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DB2XL.Core\DB2XL.Core.csproj" />
+    <ProjectReference Include="..\DB2XL.Data\DB2XL.Data.csproj" />
+    <ProjectReference Include="..\DB2XL.Transform\DB2XL.Transform.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

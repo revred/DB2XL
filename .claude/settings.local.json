@@ -32,13 +32,21 @@
       "Bash(dotnet tool install:*)",
       "Bash(reportgenerator:*)",
       "Bash(SqliteXport.Console.exe analyze:*)",
-      "Bash(dotnet:*)"
+      "Bash(dotnet:*)",
+      "Bash(touch:*)",
+      "Bash(robocopy:*)",
+      "Bash(cp:*)",
+      "Bash(del DB2XL.Core.TestsUnitTest1.cs)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(.DB2XL.ConsolebinDebugnet9.0DB2XL.Console.exe --version)",
+      "Bash(DB2XL.Console/bin/Debug/net9.0/DB2XL.Console.exe --version)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
       "C:\\tmp",
-      "C:\\mnt\\c\\code"
+      "C:\\mnt\\c\\code",
+      "C:\\"
     ]
   }
 }
