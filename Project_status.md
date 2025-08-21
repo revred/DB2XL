@@ -9,9 +9,9 @@ This document summarizes the successful completion of the unified DB2XL naming s
 ## 🏗️ Final Project Architecture - 8 Components
 
 ### **Core Foundation Layer**
-- **`DB2XL.Core/`** - Foundational models, enums, and interfaces (137/137 tests passing - 100%)
-- **`DB2XL.Data/`** - Schema discovery and data access patterns
-- **`DB2XL.Query/`** - Advanced querying with security and performance analysis (261/262 tests passing - 99.6%)
+- **`DB2XL.Core/`** - Foundational models, enums, and interfaces (127/127 tests passing - 100%)
+- **`DB2XL.Data/`** - Schema discovery, query performance analysis, and data access patterns (50/50 tests passing - 100%)
+- **`DB2XL.Query/`** - Advanced querying with security, performance analysis, and enhanced selection grammar v2 (272/272 tests passing - 100%)
 
 ### **Transformation Engine**
 - **`DB2XL.Transform/`** - 15+ built-in transformers with configuration system
@@ -28,9 +28,10 @@ This document summarizes the successful completion of the unified DB2XL naming s
 - **`DB2XL.Console/`** - Feature-rich CLI tool with colored output and AI assistant integration
 
 ### **Test Infrastructure**
-- **`DB2XL.Core.Tests/`** - Foundation component tests (137 tests)
-- **`DB2XL.Query.Tests/`** - Security & performance tests (262 tests)  
-- **`DB2XL.Integration.Tests/`** - Integration & transformation tests (430 tests)
+- **`DB2XL.Core.Tests/`** - Foundation component tests (127 tests)
+- **`DB2XL.Data.Tests/`** - Query performance analysis and schema discovery tests (50 tests)
+- **`DB2XL.Query.Tests/`** - Security, performance, and grammar tests (272 tests)  
+- **`DB2XL.Integration.Tests/`** - Integration, transformation, and console tests (430 tests)
 
 ---
 
@@ -81,10 +82,11 @@ dotnet build
 # Build succeeded. 0 Warning(s) 0 Error(s)
 ```
 
-### **Test Results**: ✅ **812 of 829 tests passing (97.9%)**
-- **DB2XL.Core.Tests**: 137/137 passing (100%)
-- **DB2XL.Query.Tests**: 261/262 passing (99.6%)
-- **DB2XL.Integration.Tests**: 414/430 passing (96.3%)
+### **Test Results**: ✅ **875 of 879 tests passing (99.5%)**
+- **DB2XL.Core.Tests**: 127/127 passing (100%)
+- **DB2XL.Data.Tests**: 50/50 passing (100%)
+- **DB2XL.Query.Tests**: 272/272 passing (100%)
+- **DB2XL.Integration.Tests**: 426/430 passing (99.1%)
 
 ### **Architecture Quality**: ✅ **Enterprise Ready**
 - **No naming conflicts** - All duplicate classes consolidated

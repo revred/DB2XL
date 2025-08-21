@@ -518,7 +518,7 @@ public static class AnalyzeCommand
         tablesTable.AddColumn("Type");
         tablesTable.AddColumn("Columns");
         tablesTable.AddColumn("Rows");
-        tablesTable.AddColumn("PK Strategy");
+        tablesTable.AddColumn("Primary Key Strategy");
         tablesTable.AddColumn("PK Quality");
         tablesTable.AddColumn("Ordering");
 
@@ -540,11 +540,11 @@ public static class AnalyzeCommand
             };
 
             tablesTable.AddRow(
-                table.Name,
-                table.Type,
+                Markup.Escape(table.Name),
+                Markup.Escape(table.Type),
                 table.Columns.Count.ToString(),
                 table.RowCount >= 0 ? table.RowCount.ToString("N0") : "Error",
-                table.PrimaryKeyStrategy ?? "Unknown",
+                Markup.Escape(table.PrimaryKeyStrategy ?? "Unknown"),
                 qualityDisplay,
                 orderingDisplay
             );

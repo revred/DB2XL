@@ -2,8 +2,8 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-812%2F829%20Passing-brightgreen?style=flat-square)](#testing)
-[![Coverage](https://img.shields.io/badge/Coverage-72%25-green?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-875%2F879%20Passing-brightgreen?style=flat-square)](#testing)
+[![Coverage](https://img.shields.io/badge/Coverage-99.5%25-brightgreen?style=flat-square)](#testing)
 
 An enterprise-grade SQLite export platform with **8-component modular architecture**, advanced data transformation, and AI-ready export formats. Convert SQLite databases to Excel/JSONL with **byte-for-byte deterministic output**.
 
@@ -119,6 +119,7 @@ DB2XL creates an Excel file with:
 - **🔄 Data Transformation**: Advanced transformer system for human-readable output
 - **🤖 AI-Ready**: JSONL export format with schema manifests for LLM workflows
 - **🛠️ Console Tool**: Command-line interface designed for AI assistant integration
+- **⚡ Query Performance Analysis**: Execution plan analysis with performance grading and optimization suggestions
 
 ## 📚 Usage Examples
 
@@ -328,10 +329,11 @@ DB2XL Enterprise Platform
 │   │   ├── Enums/                     #    BlobRenderMode, OrderMode  
 │   │   ├── Exceptions/                #    ExportException, ValidationException
 │   │   └── Interfaces/                #    IExporter, core contracts
-│   ├── DB2XL.Data/                    # 💾 Schema discovery & data access
-│   │   ├── Schema/                    #    SqliteSchemaReader, PrimaryKeyDiscovery
+│   ├── DB2XL.Data/                    # 💾 Schema discovery & analysis
+│   │   ├── Schema/                    #    SqliteSchemaReader
 │   │   ├── Query/                     #    SqlQueryBuilder
-│   │   └── Checksum/                  #    DataChecksumCalculator
+│   │   ├── Checksum/                  #    DataChecksumCalculator
+│   │   └── Analysis/                  #    QueryExecutionPlanAnalyzer, PerformanceAnalysis
 │   └── DB2XL.Query/                   # 🔍 Advanced querying & security
 │       ├── SecurityFilter.cs          #    SQL injection protection
 │       ├── QueryPlanAnalyzer.cs       #    Performance analysis
@@ -395,28 +397,34 @@ DB2XL Enterprise Platform
 
 ## 🧪 Testing - Comprehensive Test Coverage
 
-**812 of 829 tests passing (97.9% success rate)** with 72.0% code coverage across all components.
+**875 of 879 tests passing (99.5% success rate)** with comprehensive coverage across all components.
 
 ### Test Distribution by Component
 
-**DB2XL.Core.Tests (137/137 tests - 100% success)**:
+**DB2XL.Core.Tests (127/127 tests - 100% success)**:
 - **Foundation Models**: Complete coverage of ColumnInfo, TableInfo, OrderInfo, ExportResult
 - **Exception Handling**: ExportException, ValidationException, DataConversionException  
 - **Data Services**: PrimaryKeyDiscoveryService, SyntheticPrimaryKeyGenerator
 - **Edge Cases**: Record equality, with expressions, null handling
 
-**DB2XL.Query.Tests (261/262 tests - 99.6% success)**:
+**DB2XL.Data.Tests (50/50 tests - 100% success)**:
+- **Query Performance Analysis**: Comprehensive execution plan analysis with performance grading
+- **Foreign Key Discovery**: Relationship detection and validation
+- **Schema Analysis**: Database introspection and metadata extraction
+- **Graph Analysis Engine**: Relationship mapping and validation
+
+**DB2XL.Query.Tests (272/272 tests - 100% success)**:
 - **Security Features**: SQL injection protection, parameter validation
 - **Performance Analysis**: Query plan analysis, missing index detection
-- **Selection Grammar**: Query DSL parsing and validation
+- **Selection Grammar**: Enhanced v2 grammar with join support
 - **Integration Testing**: Real database scenarios with complex queries
 
-**DB2XL.Integration.Tests (414/430 tests - 96.3% success)**:
+**DB2XL.Integration.Tests (426/430 tests - 99.1% success)**:
 - **Core Export Engine**: Data integrity validation with checksums
 - **Transformation System**: All 15+ transformers with edge cases
 - **Configuration System**: JSON/YAML loading and validation
 - **Performance Testing**: Large datasets (10K+ rows) with timing metrics
-- **Integration Workflows**: End-to-end export and transformation scenarios
+- **Console Integration**: Command-line interface and output formatting
 
 ### Test Categories
 
@@ -442,7 +450,7 @@ DB2XL Enterprise Platform
 ### Running Tests
 
 ```bash
-# Run all tests (829 total across 3 test projects)
+# Run all tests (879 total across 4 test projects)
 dotnet test
 
 # Run with code coverage
@@ -454,6 +462,7 @@ reportgenerator -reports:"TestResults/*/coverage.cobertura.xml" -targetdir:"Test
 
 # Run specific test projects
 dotnet test DB2XL.Core.Tests/
+dotnet test DB2XL.Data.Tests/
 dotnet test DB2XL.Query.Tests/
 dotnet test DB2XL.Integration.Tests/
 

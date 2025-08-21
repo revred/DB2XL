@@ -8,6 +8,7 @@ By the end of this guide, you'll know how to:
 - Export any SQLite database to Excel or JSONL with perfect fidelity
 - Use the **console tool** for quick database analysis and export
 - Use **advanced transformations** to make data human-readable
+- **Analyze query performance** with execution plan analysis and optimization suggestions
 - Customize exports with various options
 - Verify data integrity with built-in checksums
 - Analyze database structure and performance
