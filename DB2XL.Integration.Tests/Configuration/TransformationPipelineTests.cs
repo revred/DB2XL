@@ -495,4 +495,301 @@ public class TransformationPipelineTests
         // Assert
         Assert.Equal("25", result); // Should remain unchanged since transformer doesn't apply
     }
+
+    [Fact]
+    public void TransformCell_WithNullValue_HandlesCorrectly()
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig
+                            {
+                                Name = "coalesce",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["default"] = "N/A",
+                                    ["forceApply"] = "true"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry);
+        var context = new CellContext("test", "field", 0, SqliteAffinity.Text);
+
+        // Act
+        var result = pipeline.TransformCell("test", "field", null, context);
+
+        // Assert
+        Assert.Equal("N/A", result);
+    }
+
+    [Fact]
+    public void TransformCell_WithMaxErrorsReached_StopsProcessing()
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Global = new GlobalSettings 
+            { 
+                ErrorHandling = ErrorHandling.LogAndContinue,
+                MaxErrors = 1
+            },
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig
+                            {
+                                Name = "regex-replace",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["pattern"] = "[invalid",  // Invalid regex
+                                    ["replacement"] = "X",
+                                    ["forceApply"] = "true"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry, NullLogger.Instance);
+        var context = new CellContext("test", "field", 0, SqliteAffinity.Text);
+
+        // Act
+        pipeline.TransformCell("test", "field", "test1", context); // First error
+        var result = pipeline.TransformCell("test", "field", "test2", context); // Should skip
+
+        // Assert
+        Assert.Equal("test2", result); // Should return original when max errors reached
+        Assert.True(pipeline.ErrorCount >= 1);
+    }
+
+    [Fact]
+    public void TransformCell_WithLargeData_HandlesCorrectly()
+    {
+        // Arrange
+        var config = new TransformationConfig();
+        var pipeline = new TransformationPipeline(config, _registry);
+        var context = new CellContext("users", "name", 0, SqliteAffinity.Text);
+        var largeData = new string('a', 10000);
+
+        // Act
+        var result = pipeline.TransformCell("users", "name", largeData, context);
+
+        // Assert
+        Assert.Equal(largeData, result); // Should handle large data without issues
+    }
+
+    [Fact]
+    public void TransformCell_WithSpecialCharacters_HandlesCorrectly()
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig
+                            {
+                                Name = "upper",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["forceApply"] = "true"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry);
+        var context = new CellContext("test", "field", 0, SqliteAffinity.Text);
+        var specialText = "ñáéíóú中文🚀";
+
+        // Act
+        var result = pipeline.TransformCell("test", "field", specialText, context);
+
+        // Assert
+        Assert.Equal(specialText.ToUpperInvariant(), result);
+    }
+
+    [Theory]
+    [InlineData(ErrorHandling.StopOnError)]
+    [InlineData(ErrorHandling.SkipErrors)]
+    [InlineData(ErrorHandling.UseOriginalOnError)]
+    [InlineData(ErrorHandling.LogAndContinue)]
+    public void TransformCell_WithDifferentErrorHandling_BehavesCorrectly(ErrorHandling errorHandling)
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Global = new GlobalSettings { ErrorHandling = errorHandling },
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig
+                            {
+                                Name = "upper",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["forceApply"] = "true"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry);
+        var context = new CellContext("test", "field", 0, SqliteAffinity.Text);
+
+        // Act & Assert (should not throw for valid transformation)
+        var result = pipeline.TransformCell("test", "field", "test", context);
+        Assert.Equal("TEST", result);
+    }
+
+    [Fact]
+    public void TransformCell_WithMultipleTransformersInPriorityOrder_AppliesCorrectly()
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig
+                            {
+                                Name = "upper",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["forceApply"] = "true"
+                                },
+                                Priority = 2
+                            },
+                            new TransformerConfig
+                            {
+                                Name = "trim",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["forceApply"] = "true"
+                                },
+                                Priority = 1
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry);
+        var context = new CellContext("test", "field", 0, SqliteAffinity.Text);
+
+        // Act
+        var result = pipeline.TransformCell("test", "field", "  test  ", context);
+
+        // Assert - Should trim first (priority 1), then uppercase (priority 2)
+        Assert.Equal("TEST", result);
+    }
+
+    [Fact]
+    public void TransformCell_WithDisabledTransformer_SkipsTransformer()
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig
+                            {
+                                Name = "upper",
+                                Config = new Dictionary<string, string>
+                                {
+                                    ["forceApply"] = "true"
+                                },
+                                Enabled = false
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry);
+        var context = new CellContext("test", "field", 0, SqliteAffinity.Text);
+
+        // Act
+        var result = pipeline.TransformCell("test", "field", "test", context);
+
+        // Assert - Should not transform since transformer is disabled
+        Assert.Equal("test", result);
+    }
+
+    [Fact]
+    public void TransformCell_ConfigurationProperties_AccessCorrectly()
+    {
+        // Arrange
+        var config = new TransformationConfig
+        {
+            Tables = new Dictionary<string, TableConfig>
+            {
+                ["test"] = new TableConfig
+                {
+                    Columns = new Dictionary<string, List<TransformerConfig>>
+                    {
+                        ["field"] = new List<TransformerConfig>
+                        {
+                            new TransformerConfig { Name = "upper" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var pipeline = new TransformationPipeline(config, _registry);
+
+        // Act & Assert - Test that we can access configuration properties
+        Assert.Same(config, pipeline.Configuration);
+        Assert.True(pipeline.AreTransformationsEnabled);
+    }
 }

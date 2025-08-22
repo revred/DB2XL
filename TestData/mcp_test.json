@@ -1,0 +1,85 @@
+[
+  {
+    "description": "Initialize MCP session",
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2024-11-05"
+      }
+    }
+  },
+  {
+    "description": "List available tools",
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/list",
+      "params": {}
+    }
+  },
+  {
+    "description": "Create database and tables",
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "tools/call",
+      "params": {
+        "name": "execute_query",
+        "arguments": {
+          "database_path": "C:\\code\\DB2XL\\TestData\\mcp_demo.db",
+          "sql_query": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users VALUES (1, 'Alice', 'alice@test.com'), (2, 'Bob', 'bob@test.com');",
+          "allow_writes": true
+        }
+      }
+    }
+  },
+  {
+    "description": "Preview the database",
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "tools/call",
+      "params": {
+        "name": "preview_database",
+        "arguments": {
+          "database_path": "C:\\code\\DB2XL\\TestData\\mcp_demo.db",
+          "max_preview_rows": 3,
+          "include_sample_data": true
+        }
+      }
+    }
+  },
+  {
+    "description": "Get database schema",
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 5,
+      "method": "tools/call",
+      "params": {
+        "name": "get_schema",
+        "arguments": {
+          "database_path": "C:\\code\\DB2XL\\TestData\\mcp_demo.db",
+          "include_column_details": true
+        }
+      }
+    }
+  },
+  {
+    "description": "Export to JSONL",
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "tools/call",
+      "params": {
+        "name": "export_database",
+        "arguments": {
+          "database_path": "C:\\code\\DB2XL\\TestData\\mcp_demo.db",
+          "output_directory": "C:\\code\\DB2XL\\TestData\\export_output",
+          "format": "jsonl"
+        }
+      }
+    }
+  }
+]

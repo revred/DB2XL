@@ -48,7 +48,13 @@
       "Bash(copy \"C:\\code\\DB2XL\\DB2XL.Data.Tests\\TestDatabases\\northwind.sqlite\" test_verify.db)",
       "Bash(del \"C:\\code\\DB2XL\\ddb2xl_graph_requirements.md\")",
       "Bash(del Class1.cs)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(.DB2XL.Console.exe mcp:*)",
+      "Bash(./DB2XL.Console.exe mcp --capabilities-only)",
+      "Bash(csc:*)",
+      "Bash(CreateTestDb.exe)",
+      "Bash(pwsh:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": [],

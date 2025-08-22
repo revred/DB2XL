@@ -449,11 +449,11 @@ public sealed class PiiRedactionService : IPiiRedactionService
         while (await reader.ReadAsync())
         {
             columns.Add(new ColumnInfo(
-                Name: reader.GetString("name"),
-                Type: reader.GetString("type"),
-                NotNull: reader.GetBoolean("notnull"),
-                DefaultValue: reader.IsDBNull("dflt_value") ? null : reader.GetValue("dflt_value"),
-                IsPrimaryKey: reader.GetInt32("pk") > 0
+                Name: reader.GetString(1), // name column
+                Type: reader.GetString(2), // type column  
+                NotNull: reader.GetBoolean(3), // notnull column
+                DefaultValue: reader.IsDBNull(4) ? null : reader.GetValue(4), // dflt_value column
+                IsPrimaryKey: reader.GetInt32(5) > 0 // pk column
             ));
         }
         
@@ -588,14 +588,14 @@ public sealed class PiiRedactionService : IPiiRedactionService
         return (redactedTable, actions);
     }
 
-    private async Task<object?> ApplyRedactionStrategy(object? value, PiiColumnRedactionRule rule, PiiGlobalSettings settings)
+    private Task<object?> ApplyRedactionStrategy(object? value, PiiColumnRedactionRule rule, PiiGlobalSettings settings)
     {
         if (value == null)
-            return null;
+            return Task.FromResult<object?>(null);
 
         var stringValue = value.ToString() ?? "";
         
-        return rule.Strategy switch
+        var result = rule.Strategy switch
         {
             PiiRedactionStrategy.Mask => "***REDACTED***",
             PiiRedactionStrategy.Hash => ComputeHash(stringValue, settings.HashSalt),
@@ -605,6 +605,8 @@ public sealed class PiiRedactionService : IPiiRedactionService
             PiiRedactionStrategy.None => value,
             _ => "***REDACTED***"
         };
+        
+        return Task.FromResult<object?>(result);
     }
 
     private static string ComputeHash(string value, string salt)

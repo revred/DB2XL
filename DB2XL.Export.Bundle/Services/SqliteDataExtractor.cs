@@ -374,10 +374,11 @@ public sealed class SqliteDataExtractor : ISqliteDataExtractor
         string tableName,
         CancellationToken cancellationToken)
     {
-        var query = "PRAGMA table_info(@tableName)";
+        // Note: PRAGMA statements do not support parameterized queries in SQLite
+        var quotedTableName = "\"" + tableName.Replace("\"", "\"\"") + "\"";
+        var query = $"PRAGMA table_info({quotedTableName})";
         using var command = connection.CreateCommand();
         command.CommandText = query;
-        command.Parameters.AddWithValue("@tableName", tableName);
 
         var columns = new List<ColumnMetadata>();
         using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -423,10 +424,11 @@ public sealed class SqliteDataExtractor : ISqliteDataExtractor
         string tableName,
         CancellationToken cancellationToken)
     {
-        var query = "PRAGMA foreign_key_list(@tableName)";
+        // Note: PRAGMA statements do not support parameterized queries in SQLite
+        var quotedTableName = "\"" + tableName.Replace("\"", "\"\"") + "\"";
+        var query = $"PRAGMA foreign_key_list({quotedTableName})";
         using var command = connection.CreateCommand();
         command.CommandText = query;
-        command.Parameters.AddWithValue("@tableName", tableName);
 
         var foreignKeys = new List<ForeignKeyInfo>();
         using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -452,10 +454,11 @@ public sealed class SqliteDataExtractor : ISqliteDataExtractor
         string tableName,
         CancellationToken cancellationToken)
     {
-        var query = "PRAGMA index_list(@tableName)";
+        // Note: PRAGMA statements do not support parameterized queries in SQLite
+        var quotedTableName = "\"" + tableName.Replace("\"", "\"\"") + "\"";
+        var query = $"PRAGMA index_list({quotedTableName})";
         using var command = connection.CreateCommand();
         command.CommandText = query;
-        command.Parameters.AddWithValue("@tableName", tableName);
 
         var indexes = new List<Core.Models.IndexInfo>();
         using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -487,10 +490,11 @@ public sealed class SqliteDataExtractor : ISqliteDataExtractor
         string indexName,
         CancellationToken cancellationToken)
     {
-        var query = "PRAGMA index_info(@indexName)";
+        // Note: PRAGMA statements do not support parameterized queries in SQLite
+        var quotedIndexName = "\"" + indexName.Replace("\"", "\"\"") + "\"";
+        var query = $"PRAGMA index_info({quotedIndexName})";
         using var command = connection.CreateCommand();
         command.CommandText = query;
-        command.Parameters.AddWithValue("@indexName", indexName);
 
         var columns = new List<string>();
         using var reader = await command.ExecuteReaderAsync(cancellationToken);

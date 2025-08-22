@@ -279,7 +279,8 @@ var transformedValue = pipeline.TransformCell(
 );
 ```
 
-> 📚 **Complete Transformer Guide**: See [**TRANSFORMERS.md**](TRANSFORMERS.md) for comprehensive documentation of all 15+ built-in transformers, configuration options, performance tuning, and custom transformer development.
+> 📚 **Complete Transformer Guide**: See [**docs/TRANSFORMERS.md**](docs/TRANSFORMERS.md) for comprehensive documentation of all 15+ built-in transformers, configuration options, performance tuning, and custom transformer development.
+> 📚 **Quick Navigation**: See [**COLD_START.md**](COLD_START.md) for quick links to all documentation.
 
 ## 📖 Documentation
 
@@ -513,7 +514,7 @@ The test suite includes:
 
 ### Transformation Configuration
 
-For advanced data transformation, see the [**Transformer System Guide**](TRANSFORMERS.md) which covers:
+For advanced data transformation, see the [**Transformer System Guide**](docs/TRANSFORMERS.md) which covers:
 
 - **15+ Built-in Transformers**: Complete reference with examples
 - **Configuration Format**: JSON/YAML structure and options
@@ -553,12 +554,13 @@ This is a proprietary project. Please contact the maintainer for contribution gu
 For issues, questions, or feature requests:
 
 1. **Start with the [Getting Started Guide](GETTING_STARTED.md)** for tutorials and examples
-2. Check existing [Issues](https://github.com/revred/DB2XL/issues)
-3. Review the [complete specification](CLAUDE.md) for advanced features
-4. Explore [transformer documentation](TRANSFORMERS.md) for data transformation
-5. **AI Assistant Integration**: DB2XL.Console includes rich CLI designed for Claude and AI debugging workflows
-6. Run the test suite to verify your environment: `dotnet test`
-7. Create a new issue with:
+2. **Browse all documentation**: See [COLD_START.md](COLD_START.md) for quick navigation to all docs
+3. Check existing [Issues](https://github.com/revred/DB2XL/issues)
+4. Review the [complete specification](CLAUDE.md) for advanced features
+5. Explore [transformer documentation](docs/TRANSFORMERS.md) for data transformation
+6. **AI Assistant Integration**: DB2XL.Console includes rich CLI designed for Claude and AI debugging workflows
+7. Run the test suite to verify your environment: `dotnet test`
+8. Create a new issue with:
    - Database schema details
    - Error messages and stack traces
    - Expected vs actual behavior

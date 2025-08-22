@@ -811,7 +811,7 @@ public sealed class SampleGenerationService : ISampleGenerationService
             // Analyze text columns
             if (IsTextColumn(column) && nonNullValues.Any())
             {
-                var textValues = nonNullValues.Select(v => v.ToString() ?? string.Empty).ToList();
+                var textValues = nonNullValues.Select(v => v?.ToString() ?? string.Empty).ToList();
                 
                 textPatterns[columnName] = new TextPatterns
                 {

@@ -93,7 +93,7 @@ public static class PiiConfigurationLoader
         return MapFromConfigurationDto(configDto);
     }
 
-    private static async Task<PiiRedactionConfig> LoadYamlConfigurationAsync(string filePath)
+    private static Task<PiiRedactionConfig> LoadYamlConfigurationAsync(string filePath)
     {
         // For now, throw not implemented. In production, would use YamlDotNet
         throw new NotImplementedException("YAML configuration loading not yet implemented. Please use JSON format.");
@@ -156,7 +156,7 @@ public static class PiiConfigurationLoader
                 DefaultStrategy = string.IsNullOrEmpty(kvp.Value.DefaultStrategy) 
                     ? null 
                     : Enum.Parse<PiiRedactionStrategy>(kvp.Value.DefaultStrategy),
-                ExcludeColumns = kvp.Value.ExcludeColumns?.AsReadOnly() ?? Array.Empty<string>(),
+                ExcludeColumns = kvp.Value.ExcludeColumns?.ToList().AsReadOnly() ?? Array.Empty<string>().ToList().AsReadOnly(),
                 ConditionalRedaction = kvp.Value.ConditionalRedaction
             }
         ) ?? new Dictionary<string, PiiTableRedactionRules>();

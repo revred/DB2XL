@@ -136,6 +136,226 @@ tables:
     }
 
     [Fact]
+    public void LoadFromJson_WithInvalidJson_ThrowsException()
+    {
+        // Arrange
+        var invalidJson = "{ invalid json }";
+
+        // Act & Assert
+        Assert.Throws<ConfigurationException>(() => ConfigurationLoader.LoadFromJson(invalidJson));
+    }
+
+    [Fact]
+    public void LoadFromJson_WithEmptyJson_ThrowsException()
+    {
+        // Arrange
+        var emptyJson = "";
+
+        // Act & Assert
+        Assert.Throws<ConfigurationException>(() => ConfigurationLoader.LoadFromJson(emptyJson));
+    }
+
+    [Fact]
+    public void LoadFromJson_WithNullJson_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => ConfigurationLoader.LoadFromJson(null!));
+    }
+
+    [Fact]
+    public void LoadFromYaml_WithInvalidYaml_ThrowsException()
+    {
+        // Arrange
+        var invalidYaml = "invalid: yaml: content: [";
+
+        // Act & Assert
+        Assert.ThrowsAny<Exception>(() => ConfigurationLoader.LoadFromYaml(invalidYaml));
+    }
+
+    [Fact]
+    public void LoadFromYaml_WithNullYaml_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<ConfigurationException>(() => ConfigurationLoader.LoadFromYaml(null!));
+    }
+
+    [Fact]
+    public void LoadFromFile_WithNonExistentFile_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<FileNotFoundException>(() => ConfigurationLoader.LoadFromFile("nonexistent.json"));
+    }
+
+    [Theory]
+    [InlineData("SkipErrors")]
+    [InlineData("UseOriginalOnError")]
+    [InlineData("StopOnError")]
+    [InlineData("LogAndContinue")]
+    public void LoadFromJson_WithDifferentErrorHandling_ParsesCorrectly(string errorHandling)
+    {
+        // Arrange
+        var json = $@"{{
+            ""version"": ""1.0"",
+            ""global"": {{
+                ""errorHandling"": ""{errorHandling}""
+            }}
+        }}";
+
+        // Act
+        var config = ConfigurationLoader.LoadFromJson(json);
+
+        // Assert
+        Assert.True(Enum.TryParse<ErrorHandling>(errorHandling, out var expected));
+        Assert.Equal(expected, config.Global.ErrorHandling);
+    }
+
+    [Fact]
+    public void LoadFromJson_WithComplexGlobalTransformers_ParsesCorrectly()
+    {
+        // Arrange
+        var json = @"{
+            ""version"": ""1.0"",
+            ""global"": {
+                ""enableTransformations"": true
+            },
+            ""globalTransformers"": [
+                {
+                    ""name"": ""trim"",
+                    ""config"": {
+                        ""characters"": "" \t\n""
+                    },
+                    ""priority"": 1,
+                    ""enabled"": true
+                },
+                {
+                    ""name"": ""upper"",
+                    ""config"": {},
+                    ""priority"": 2,
+                    ""enabled"": false
+                }
+            ]
+        }";
+
+        // Act
+        var config = ConfigurationLoader.LoadFromJson(json);
+
+        // Assert
+        Assert.Equal(2, config.GlobalTransformers.Count);
+        Assert.Equal("trim", config.GlobalTransformers[0].Name);
+        Assert.Equal(" \t\n", config.GlobalTransformers[0].Config["characters"]);
+        Assert.Equal(1, config.GlobalTransformers[0].Priority);
+        Assert.True(config.GlobalTransformers[0].Enabled);
+        
+        Assert.Equal("upper", config.GlobalTransformers[1].Name);
+        Assert.False(config.GlobalTransformers[1].Enabled);
+    }
+
+    [Fact]
+    public void LoadFromJson_WithRowTransformers_ParsesCorrectly()
+    {
+        // Arrange
+        var json = @"{
+            ""version"": ""1.0"",
+            ""tables"": {
+                ""orders"": {
+                    ""rowTransformers"": [
+                        {
+                            ""name"": ""calculateTotal"",
+                            ""config"": {
+                                ""priceColumn"": ""price"",
+                                ""quantityColumn"": ""quantity""
+                            },
+                            ""priority"": 1,
+                            ""enabled"": true
+                        }
+                    ]
+                }
+            }
+        }";
+
+        // Act
+        var config = ConfigurationLoader.LoadFromJson(json);
+
+        // Assert
+        Assert.True(config.Tables.ContainsKey("orders"));
+        var ordersTable = config.Tables["orders"];
+        Assert.Single(ordersTable.RowTransformers);
+        Assert.Equal("calculateTotal", ordersTable.RowTransformers[0].Name);
+        Assert.Equal("price", ordersTable.RowTransformers[0].Config["priceColumn"]);
+    }
+
+    [Fact]
+    public void LoadFromJson_WithTableFilters_ParsesCorrectly()
+    {
+        // Arrange
+        var json = @"{
+            ""version"": ""1.0"",
+            ""tables"": {
+                ""logs"": {
+                    ""filters"": {
+                        ""maxRows"": 50000,
+                        ""excludeColumns"": [""temp"", ""debug""],
+                        ""includeColumns"": [""id"", ""message"", ""timestamp""],
+                        ""whereClause"": ""level = 'ERROR'""
+                    }
+                }
+            }
+        }";
+
+        // Act
+        var config = ConfigurationLoader.LoadFromJson(json);
+
+        // Assert
+        var logsTable = config.Tables["logs"];
+        Assert.Equal(50000, logsTable.Filters.MaxRows);
+        Assert.Contains("temp", logsTable.Filters.ExcludeColumns);
+        Assert.Contains("debug", logsTable.Filters.ExcludeColumns);
+        Assert.Contains("id", logsTable.Filters.IncludeColumns);
+        Assert.Equal("level = 'ERROR'", logsTable.Filters.WhereClause);
+    }
+
+    [Fact]
+    public void LoadFromJson_WithPerformanceSettings_ParsesCorrectly()
+    {
+        // Arrange
+        var json = @"{
+            ""version"": ""1.0"",
+            ""global"": {
+                ""performance"": {
+                    ""batchSize"": 25000,
+                    ""enableParallelProcessing"": true,
+                    ""maxDegreeOfParallelism"": 8,
+                    ""enableOptimizations"": true
+                }
+            }
+        }";
+
+        // Act
+        var config = ConfigurationLoader.LoadFromJson(json);
+
+        // Assert
+        var perf = config.Global.Performance;
+        Assert.Equal(25000, perf.BatchSize);
+        Assert.True(perf.EnableParallelProcessing);
+        Assert.Equal(8, perf.MaxDegreeOfParallelism);
+        // Note: Test the properties that actually exist in PerformanceSettings
+    }
+
+    [Fact]
+    public void LoadFromJson_WithMinimalValidConfig_ParsesCorrectly()
+    {
+        // Arrange
+        var json = @"{""version"": ""1.0""}";
+
+        // Act
+        var config = ConfigurationLoader.LoadFromJson(json);
+
+        // Assert
+        Assert.Equal("1.0", config.Version);
+        Assert.NotNull(config.Global);
+    }
+
+    [Fact]
     public void SaveToJson_ShouldProduceValidJson()
     {
         // Arrange

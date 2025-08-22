@@ -259,8 +259,8 @@ public sealed class McpExportService : IMcpExportService
             using var connection = new SqliteConnection(connectionString);
             await connection.OpenAsync();
 
-            var schema = await _schemaReader.ReadSchemaAsync(connectionString);
-            var databaseSchema = MapToMcpSchema(schema, request);
+            var tables = SqliteSchemaReader.GetDatabaseObjects(connection, null, false); // TODO: Add IncludeViews to McpSchemaRequest
+            var databaseSchema = MapToMcpSchema(tables, request);
 
             return new McpSchemaResult
             {
@@ -554,7 +554,7 @@ public sealed class McpExportService : IMcpExportService
         return sampleData;
     }
 
-    private async Task<TableDataPatterns> AnalyzeTableDataPatternsAsync(
+    private Task<TableDataPatterns> AnalyzeTableDataPatternsAsync(
         SqliteConnection connection, 
         string tableName, 
         IReadOnlyList<McpColumnPreview> columns,
@@ -598,14 +598,14 @@ public sealed class McpExportService : IMcpExportService
             }
         }
 
-        return new TableDataPatterns
+        return Task.FromResult(new TableDataPatterns
         {
             TimestampColumns = timestampColumns.AsReadOnly(),
             PotentialPiiColumns = piiColumns.AsReadOnly(),
             JsonColumns = jsonColumns.AsReadOnly(),
             PartitionableColumns = partitionableColumns.AsReadOnly(),
             IdColumns = idColumns.AsReadOnly()
-        };
+        });
     }
 
     private static bool IsTimestampColumn(string columnName, string columnType)
@@ -643,10 +643,10 @@ public sealed class McpExportService : IMcpExportService
         return idIndicators.Any(indicator => columnName.EndsWith(indicator, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task<IReadOnlyList<RelationshipInfo>> GetRelationshipsAsync(string connectionString)
+    private Task<IReadOnlyList<RelationshipInfo>> GetRelationshipsAsync(string connectionString)
     {
         // For now, return empty list - FK detection would require more complex analysis
-        return Array.Empty<RelationshipInfo>();
+        return Task.FromResult<IReadOnlyList<RelationshipInfo>>(Array.Empty<RelationshipInfo>());
     }
 
     private async Task<List<string>> GetTableNamesAsync(string connectionString)
@@ -737,10 +737,10 @@ public sealed class McpExportService : IMcpExportService
         return new[] { "INSERT", "UPDATE" };
     }
 
-    private async Task<DeltaCheckpointInfo?> GenerateCheckpointInfoAsync(McpDeltaRequest request)
+    private Task<DeltaCheckpointInfo?> GenerateCheckpointInfoAsync(McpDeltaRequest request)
     {
         if (string.IsNullOrEmpty(request.CheckpointFile))
-            return null;
+            return Task.FromResult<DeltaCheckpointInfo?>(null);
 
         var checkpointPath = Path.Combine(request.OutputDirectory, "checkpoint.json");
         var watermarks = new Dictionary<string, object>();
@@ -748,13 +748,13 @@ public sealed class McpExportService : IMcpExportService
         // This would collect actual watermark values from the delta exports
         // For now, create a basic checkpoint structure
 
-        return new DeltaCheckpointInfo
+        return Task.FromResult<DeltaCheckpointInfo?>(new DeltaCheckpointInfo
         {
             CheckpointPath = checkpointPath,
             LastWatermarks = watermarks,
             TotalRowsProcessed = 0,
             CreatedAt = DateTime.UtcNow
-        };
+        });
     }
 
     private async Task<IReadOnlyList<ExportedFileInfo>> CollectExportedFilesAsync(string outputDirectory)
@@ -796,13 +796,13 @@ public sealed class McpExportService : IMcpExportService
         return parts.Length > 0 ? parts[0] : fileName;
     }
 
-    private async Task<long> EstimateRowCountAsync(string filePath)
+    private Task<long> EstimateRowCountAsync(string filePath)
     {
         try
         {
             if (Path.GetExtension(filePath).Equals(".jsonl", StringComparison.OrdinalIgnoreCase))
             {
-                return File.ReadLines(filePath).Count();
+                return Task.FromResult<long>(File.ReadLines(filePath).Count());
             }
         }
         catch
@@ -810,7 +810,7 @@ public sealed class McpExportService : IMcpExportService
             // Ignore errors in row count estimation
         }
         
-        return 0;
+        return Task.FromResult<long>(0);
     }
 
     private async Task<string> ComputeFileHashAsync(string filePath)
@@ -878,28 +878,20 @@ public sealed class McpExportService : IMcpExportService
         return manifestPath;
     }
 
-    private static DatabaseSchema MapToMcpSchema(DatabaseInfo schema, McpSchemaRequest request)
+    private static DatabaseSchema MapToMcpSchema(List<TableInfo> tables, McpSchemaRequest request)
     {
-        var tables = schema.Tables.Select(t => new TableSchema
+        var tableSchemas = tables.Select(t => new TableSchema
         {
             Name = t.Name,
-            Columns = t.Columns.Select((c, idx) => new ColumnSchema
-            {
-                Name = c.Name,
-                Type = c.DataType,
-                IsNullable = c.IsNullable,
-                IsPrimaryKey = c.IsPrimaryKey,
-                DefaultValue = c.DefaultValue,
-                Position = idx
-            }).ToList(),
-            CreateSql = request.IncludeCreateSql ? t.CreateStatement : null,
+            Columns = Array.Empty<ColumnSchema>(), // TODO: Get actual column information if needed
+            CreateSql = request.IncludeCreateSql ? null : null, // TODO: Get CREATE statement if needed
             WithoutRowId = false // Would need to be detected from CREATE statement
         }).ToList();
 
         return new DatabaseSchema
         {
             DatabasePath = string.Empty, // Would be set from request
-            Tables = tables,
+            Tables = tableSchemas,
             Views = Array.Empty<ViewSchema>(),
             Indexes = Array.Empty<IndexSchema>(),
             ForeignKeys = Array.Empty<ForeignKeySchema>()

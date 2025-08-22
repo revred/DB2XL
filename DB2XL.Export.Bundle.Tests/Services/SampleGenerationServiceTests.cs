@@ -60,7 +60,7 @@ public class SampleGenerationServiceTests : IDisposable
         // Verify file exists
         var filePath = userSample.FilePaths.First();
         Assert.True(File.Exists(filePath));
-        Assert.True(filePath.EndsWith(".jsonl"));
+        Assert.EndsWith(".jsonl", filePath);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class SampleGenerationServiceTests : IDisposable
         
         var userSample = result.TableSamples["users"];
         var filePath = userSample.FilePaths.First();
-        Assert.True(filePath.EndsWith(".csv"));
+        Assert.EndsWith(".csv", filePath);
         Assert.True(File.Exists(filePath));
         
         // Verify CSV format
@@ -196,7 +196,7 @@ public class SampleGenerationServiceTests : IDisposable
         
         var userSample = result.TableSamples["users"];
         var filePath = userSample.FilePaths.First();
-        Assert.True(filePath.EndsWith(".sql"));
+        Assert.EndsWith(".sql", filePath);
         Assert.True(File.Exists(filePath));
         
         // Verify SQL format

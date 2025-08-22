@@ -5,6 +5,16 @@ using System.Text.RegularExpressions;
 namespace DB2XL.Transform.Configuration;
 
 /// <summary>
+/// Wrapper that pairs a transformer with its priority for ordering
+/// </summary>
+internal record PrioritizedCellTransformer(ICellTransformer Transformer, int Priority);
+
+/// <summary>
+/// Wrapper that pairs a row transformer with its priority for ordering
+/// </summary>
+internal record PrioritizedRowTransformer(IRowTransformer Transformer, int Priority);
+
+/// <summary>
 /// Executes transformations based on configuration
 /// </summary>
 public class TransformationPipeline
@@ -12,8 +22,8 @@ public class TransformationPipeline
     private readonly TransformationConfig _config;
     private readonly ITransformerRegistry _registry;
     private readonly ILogger? _logger;
-    private readonly Dictionary<string, List<ICellTransformer>> _compiledCellTransformers = new();
-    private readonly Dictionary<string, List<IRowTransformer>> _compiledRowTransformers = new();
+    private readonly Dictionary<string, List<PrioritizedCellTransformer>> _compiledCellTransformers = new();
+    private readonly Dictionary<string, List<PrioritizedRowTransformer>> _compiledRowTransformers = new();
     private int _errorCount = 0;
 
     public TransformationPipeline(TransformationConfig config, ITransformerRegistry registry, ILogger? logger = null)
@@ -220,14 +230,14 @@ public class TransformationPipeline
         // Compile table-specific transformers
         foreach (var (tableName, tableConfig) in _config.Tables)
         {
-            var tableCellTransformers = new Dictionary<string, List<ICellTransformer>>();
+            var tableCellTransformers = new Dictionary<string, List<PrioritizedCellTransformer>>();
             
             foreach (var (columnName, transformerConfigs) in tableConfig.Columns)
             {
                 var columnTransformers = CreateCellTransformers(transformerConfigs);
                 // Combine global and column-specific transformers
                 var allTransformers = globalCellTransformers.Concat(columnTransformers)
-                    .OrderBy(t => GetTransformerPriority(t))
+                    .OrderBy(t => t.Priority)
                     .ToList();
                 
                 tableCellTransformers[columnName] = allTransformers;
@@ -237,7 +247,7 @@ public class TransformationPipeline
 
             // Compile row transformers
             var rowTransformers = CreateRowTransformers(tableConfig.RowTransformers)
-                .OrderBy(t => GetRowTransformerPriority(t))
+                .OrderBy(t => t.Priority)
                 .ToList();
             
             _compiledRowTransformers[tableName] = rowTransformers;
@@ -251,9 +261,9 @@ public class TransformationPipeline
     /// <summary>
     /// Creates cell transformers from configuration
     /// </summary>
-    private List<ICellTransformer> CreateCellTransformers(List<TransformerConfig> configs)
+    private List<PrioritizedCellTransformer> CreateCellTransformers(List<TransformerConfig> configs)
     {
-        var transformers = new List<ICellTransformer>();
+        var transformers = new List<PrioritizedCellTransformer>();
 
         foreach (var config in configs.Where(c => c.Enabled))
         {
@@ -262,9 +272,9 @@ public class TransformationPipeline
                 if (_registry.IsRegistered(config.Name))
                 {
                     var transformer = _registry.CreateCell(config.Name, config.Config);
-                    transformers.Add(transformer);
+                    transformers.Add(new PrioritizedCellTransformer(transformer, config.Priority));
                     
-                    _logger?.LogDebug("Created cell transformer: {Name}", config.Name);
+                    _logger?.LogDebug("Created cell transformer: {Name} with priority {Priority}", config.Name, config.Priority);
                 }
                 else
                 {
@@ -287,9 +297,9 @@ public class TransformationPipeline
     /// <summary>
     /// Creates row transformers from configuration
     /// </summary>
-    private List<IRowTransformer> CreateRowTransformers(List<RowTransformerConfig> configs)
+    private List<PrioritizedRowTransformer> CreateRowTransformers(List<RowTransformerConfig> configs)
     {
-        var transformers = new List<IRowTransformer>();
+        var transformers = new List<PrioritizedRowTransformer>();
 
         foreach (var config in configs.Where(c => c.Enabled))
         {
@@ -298,9 +308,9 @@ public class TransformationPipeline
                 if (_registry.IsRowRegistered(config.Name))
                 {
                     var transformer = _registry.CreateRow(config.Name, config.Config);
-                    transformers.Add(transformer);
+                    transformers.Add(new PrioritizedRowTransformer(transformer, config.Priority));
                     
-                    _logger?.LogDebug("Created row transformer: {Name}", config.Name);
+                    _logger?.LogDebug("Created row transformer: {Name} with priority {Priority}", config.Name, config.Priority);
                 }
                 else
                 {
@@ -325,12 +335,12 @@ public class TransformationPipeline
     /// </summary>
     private List<ICellTransformer> GetCellTransformersForColumn(string tableName, string columnName, CellContext context)
     {
-        var transformers = new List<ICellTransformer>();
+        var transformers = new List<PrioritizedCellTransformer>();
 
         // Add global transformers that match this column
         foreach (var transformer in CreateCellTransformers(_config.GlobalTransformers))
         {
-            if (DoesTransformerApplyToColumn(transformer, columnName, context, null))
+            if (DoesTransformerApplyToColumn(transformer.Transformer, columnName, context, null))
             {
                 transformers.Add(transformer);
             }
@@ -354,7 +364,7 @@ public class TransformationPipeline
             }
         }
 
-        return transformers.OrderBy(GetTransformerPriority).ToList();
+        return transformers.OrderBy(t => t.Priority).Select(t => t.Transformer).ToList();
     }
 
     /// <summary>
@@ -364,7 +374,7 @@ public class TransformationPipeline
     {
         if (_compiledRowTransformers.TryGetValue(tableName, out var transformers))
         {
-            return transformers;
+            return transformers.Select(t => t.Transformer).ToList();
         }
 
         return new List<IRowTransformer>();
@@ -416,22 +426,6 @@ public class TransformationPipeline
         return Regex.IsMatch(text, regexPattern, RegexOptions.IgnoreCase);
     }
 
-    /// <summary>
-    /// Gets the priority for a cell transformer
-    /// </summary>
-    private int GetTransformerPriority(ICellTransformer transformer)
-    {
-        // Try to extract priority from configuration if possible
-        return 100; // Default priority
-    }
-
-    /// <summary>
-    /// Gets the priority for a row transformer
-    /// </summary>
-    private int GetRowTransformerPriority(IRowTransformer transformer)
-    {
-        return 100; // Default priority
-    }
 
     /// <summary>
     /// Handles transformer errors and updates error count

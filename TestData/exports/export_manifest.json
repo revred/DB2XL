@@ -1,0 +1,18 @@
+{
+  "ExportTimestamp": "2025-08-22T00:15:45.5833414Z",
+  "SourceDatabase": "C:/code/DB2XL/TestData/mcp_demo.db",
+  "TransformationsEnabled": false,
+  "DualExportStrategy": "TransformedOnly",
+  "Tables": [
+    {
+      "TableName": "users",
+      "TableType": "table",
+      "FileName": "users.jsonl",
+      "SchemaFileName": "users.schema.json",
+      "RowCount": 3,
+      "ColumnCount": 3,
+      "OrderMode": "PrimaryKey",
+      "Checksum": "407617764C32B579F82A8925033EE1F3F779FC326DAC18048024464BE6D5F480"
+    }
+  ]
+}

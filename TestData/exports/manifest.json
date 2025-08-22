@@ -1,0 +1,1 @@
+{"generatedAt":"2025-08-22T00:15:45.6355877Z","version":"1.0.0","database":{"tables":1,"views":0},"files":[{"relativePath":"users.jsonl","tableName":"users","format":"jsonl","rowCount":3,"fileSizeBytes":150,"sha256Hash":"d59833c5e295df21540e37473dfe6a44d1562f3a2138b9d81cfa60ada69bbb91","isSample":false}]}
