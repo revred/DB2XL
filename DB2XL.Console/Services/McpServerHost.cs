@@ -1,5 +1,5 @@
+using DB2XL.Core.Models;
 using DB2XL.Core.Services;
-using DB2XL.Export.Bundle.Services;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -16,15 +16,8 @@ public sealed class McpServerHost
 
     public McpServerHost()
     {
-        // Initialize MCP service with dependencies
-        var bundleService = CreateBundleService();
-        var (watermarkExporter, changeLogExporter, manifestManager) = CreateDeltaServices();
-        
-        _mcpService = new McpExportService(
-            bundleService,
-            watermarkExporter,
-            changeLogExporter,
-            manifestManager);
+        // Initialize MCP service with simplified implementation
+        _mcpService = new SimpleMcpExportService();
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -88,7 +81,7 @@ public sealed class McpServerHost
                 version = "1.0.0",
                 description = "SQLite database export and analysis tools for AI assistants"
             },
-            tools = new[]
+            tools = new object[]
             {
                 new
                 {
@@ -384,25 +377,4 @@ public sealed class McpServerHost
         return JsonSerializer.Serialize(response, _jsonOptions);
     }
 
-    private static IBundleExportService CreateBundleService()
-    {
-        var pathManager = new BundlePathManager();
-        var hashCalculator = new BundleHashCalculator();
-        var validator = new BundleExportValidator();
-        var schemaReader = new SqliteSchemaReader();
-
-        return new BundleExportService(pathManager, hashCalculator, validator, schemaReader);
-    }
-
-    private static (IWatermarkDeltaExporter, IChangeLogDeltaExporter, IDeltaManifestManager) CreateDeltaServices()
-    {
-        var jsonlExporter = new JsonlExportEngine();
-        var parquetExporter = new ParquetExportEngine();
-
-        var watermarkExporter = new WatermarkDeltaExporter(jsonlExporter, parquetExporter);
-        var changeLogExporter = new ChangeLogDeltaExporter(jsonlExporter, parquetExporter);
-        var manifestManager = new DeltaManifestManager();
-
-        return (watermarkExporter, changeLogExporter, manifestManager);
-    }
 }

@@ -16,13 +16,13 @@ public class Program
             ShowBanner();
 
             // Parse command line arguments and execute appropriate command
-            // Create stub classes to maintain command parser structure while Bundle/MCP are temporarily disabled
-            return await Parser.Default.ParseArguments<ExportOptions, AnalyzeOptions, StubBundleOptions, StubMcpOptions>(args)
+            // Create stub classes to maintain command parser structure while Bundle is temporarily disabled
+            return await Parser.Default.ParseArguments<ExportOptions, AnalyzeOptions, StubBundleOptions, McpOptions>(args)
                 .MapResult(
                     async (ExportOptions opts) => await ExportCommand.Execute(opts),
                     (AnalyzeOptions opts) => Task.FromResult(AnalyzeCommand.Execute(opts)),
                     (StubBundleOptions opts) => Task.FromResult(HandleDisabledCommand("bundle")),
-                    (StubMcpOptions opts) => Task.FromResult(HandleDisabledCommand("mcp")),
+                    async (McpOptions opts) => await McpCommand.Execute(opts),
                     errs => Task.FromResult(HandleParseErrors(errs))
                 );
         }
@@ -47,7 +47,7 @@ public class Program
               [green]export[/]   Export SQLite database to Excel or JSONL with advanced filtering
               [green]analyze[/]  Analyze database structure, PKs, and performance metrics
               [dim]bundle[/]   Export to structured bundle with JSONL partitions and AI manifests (temporarily disabled)
-              [dim]mcp[/]      Start MCP server for AI assistant integration (temporarily disabled)
+              [green]mcp[/]      Start MCP server for AI assistant integration
             
             [yellow]Basic Examples:[/]
               [dim]sqlitexport export data.db output.xlsx --transform[/]
@@ -121,10 +121,5 @@ public class Program
 // Stub classes to maintain command parser structure
 [Verb("bundle", HelpText = "Export to structured bundle with JSONL partitions (temporarily disabled).")]
 internal class StubBundleOptions
-{
-}
-
-[Verb("mcp", HelpText = "Start MCP server for AI assistant integration (temporarily disabled).")]
-internal class StubMcpOptions
 {
 }
